@@ -10,17 +10,20 @@ const path = require('path');
 const { config } = require('../config/env');
 const response = require('../utils/response');
 const { requireAdmin } = require('../middleware/auth');
+const storageService = require('../services/storage');
 
 const createRouter = (db, contentDir) => {
     const router = express.Router();
 
-    // Ensure content directory exists
+    // Ensure content directory exists (for local fallback)
     if (!fs.existsSync(contentDir)) {
         fs.mkdirSync(contentDir, { recursive: true });
     }
 
-    // Multer configuration
-    const storage = multer.diskStorage({
+    // Multer configuration - use memory storage for GCS uploads
+    const useGCS = storageService.isReady();
+    
+    const diskStorage = multer.diskStorage({
         destination: (req, file, cb) => cb(null, contentDir),
         filename: (req, file, cb) => {
             const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -33,6 +36,8 @@ const createRouter = (db, contentDir) => {
         },
     });
 
+    const memoryStorage = multer.memoryStorage();
+
     const allowedMimeTypes = [...config.allowedVideoTypes, ...config.allowedImageTypes];
 
     const fileFilter = (req, file, cb) => {
@@ -44,7 +49,7 @@ const createRouter = (db, contentDir) => {
     };
 
     const upload = multer({
-        storage,
+        storage: useGCS ? memoryStorage : diskStorage,
         limits: { fileSize: config.maxFileSize },
         fileFilter,
     });
@@ -54,7 +59,7 @@ const createRouter = (db, contentDir) => {
      * Upload new content (ADMIN)
      */
     router.post('/upload', requireAdmin, (req, res, next) => {
-        upload.single('file')(req, res, (err) => {
+        upload.single('file')(req, res, async (err) => {
             if (err) {
                 if (err.code === 'LIMIT_FILE_SIZE') {
                     return response.badRequest(res, `File too large. Maximum size: ${config.maxFileSize / (1024 * 1024)}MB`);
@@ -67,18 +72,39 @@ const createRouter = (db, contentDir) => {
             }
 
             try {
-                const serverUrl = `${req.protocol}://${req.get('host')}`;
                 const displayName = req.body.name?.replace(/[^a-zA-Z0-9\s\-_.]/g, '').trim() || req.file.originalname;
                 const duration = parseInt(req.body.duration) || 10;
+
+                let filename, url, size;
+
+                if (storageService.isReady()) {
+                    // Upload to Google Cloud Storage
+                    const result = await storageService.uploadFile(
+                        req.file.buffer,
+                        req.file.originalname,
+                        req.file.mimetype
+                    );
+                    filename = result.filename;
+                    url = result.url;
+                    size = result.size;
+                    console.log(`[Content] Uploaded to GCS: ${displayName}`);
+                } else {
+                    // Fallback to local storage
+                    const serverUrl = `${req.protocol}://${req.get('host')}`;
+                    filename = req.file.filename;
+                    url = `${serverUrl}/content/${req.file.filename}`;
+                    size = req.file.size;
+                    console.log(`[Content] Uploaded locally: ${displayName}`);
+                }
 
                 const newContent = {
                     id: crypto.randomUUID(),
                     name: displayName,
-                    filename: req.file.filename,
+                    filename: filename,
                     type: req.file.mimetype.startsWith('video') ? 'video' : 'image',
                     mimeType: req.file.mimetype,
-                    size: req.file.size,
-                    url: `${serverUrl}/content/${req.file.filename}`,
+                    size: size,
+                    url: url,
                     duration,
                     uploadDate: new Date().toISOString(),
                 };
@@ -87,21 +113,21 @@ const createRouter = (db, contentDir) => {
                     data.content.push(newContent);
                     return {
                         data: newContent,
-                        audit: { action: 'UPLOAD_CONTENT', details: { name: displayName, file: req.file.filename } },
+                        audit: { action: 'UPLOAD_CONTENT', details: { name: displayName, file: filename } },
                     };
                 });
 
-                console.log(`[Content] Uploaded: ${displayName}`);
                 return response.created(res, newContent, 'Content uploaded successfully');
             } catch (err) {
-                // Clean up uploaded file if database operation fails
-                if (req.file) {
+                console.error('[Content] Upload error:', err.message);
+                // Clean up local file if it exists
+                if (req.file && req.file.filename) {
                     const filePath = path.join(contentDir, req.file.filename);
                     if (fs.existsSync(filePath)) {
                         fs.unlinkSync(filePath);
                     }
                 }
-                next(err);
+                return response.error(res, `Upload failed: ${err.message}`, 500);
             }
         });
     });
@@ -169,7 +195,7 @@ const createRouter = (db, contentDir) => {
      * DELETE /api/content/:id
      * Delete content (ADMIN)
      */
-    router.delete('/:id', requireAdmin, (req, res, next) => {
+    router.delete('/:id', requireAdmin, async (req, res, next) => {
         try {
             const { id } = req.params;
             let fileToDelete = null;
@@ -196,9 +222,15 @@ const createRouter = (db, contentDir) => {
 
             // Delete file after successful DB update
             if (fileToDelete) {
-                const filePath = path.join(contentDir, fileToDelete);
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
+                if (storageService.isReady() && fileToDelete.startsWith('content/')) {
+                    // Delete from GCS
+                    await storageService.deleteFile(fileToDelete);
+                } else {
+                    // Delete from local storage
+                    const filePath = path.join(contentDir, fileToDelete);
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                    }
                 }
             }
 
