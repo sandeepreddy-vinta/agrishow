@@ -12,6 +12,7 @@ class StorageService {
         this.bucket = null;
         this.bucketName = process.env.GCS_BUCKET_NAME;
         this.isConfigured = false;
+        this.usePublicUrls = process.env.GCS_PUBLIC_BUCKET !== 'false'; // Default to trying public
 
         this.init();
     }
@@ -57,18 +58,17 @@ class StorageService {
 
         const file = this.bucket.file(filename);
 
-        // Upload to GCS
+        // Upload to GCS with public-read ACL if bucket allows
         await file.save(fileBuffer, {
             metadata: {
                 contentType: mimeType,
+                cacheControl: 'public, max-age=31536000', // Cache for 1 year
             },
-            resumable: false, // For files < 10MB, non-resumable is faster
+            resumable: fileBuffer.length > 5 * 1024 * 1024, // Use resumable for files > 5MB
+            public: true, // Try to make public on upload
         });
 
-        // Make the file publicly readable
-        await file.makePublic();
-
-        // Get public URL
+        // Get public URL (works if bucket has uniform access with allUsers)
         const url = `https://storage.googleapis.com/${this.bucketName}/${filename}`;
 
         return {
