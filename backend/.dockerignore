@@ -1,0 +1,31 @@
+# Dependencies (will be installed in container)
+node_modules/
+
+# Environment files (secrets set via Cloud Run)
+.env
+.env.*
+
+# Development files
+coverage/
+tests/
+*.test.js
+jest.config.js
+
+# Runtime data (ephemeral in Cloud Run)
+database.json
+audit.log
+backups/
+content/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
