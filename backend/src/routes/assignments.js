@@ -1,0 +1,230 @@
+/**
+ * Assignment Routes
+ */
+
+const express = require('express');
+const response = require('../utils/response');
+const { requireAdmin } = require('../middleware/auth');
+const { validateBody, validateParams } = require('../middleware/validation');
+
+const createRouter = (db) => {
+    const router = express.Router();
+
+    /**
+     * POST /api/assignments
+     * Assign content to a device (ADMIN)
+     */
+    router.post('/', requireAdmin, validateBody('createAssignment'), (req, res, next) => {
+        try {
+            const { deviceId, contentIds } = req.validatedBody;
+
+            const result = db.transact((data) => {
+                const franchise = data.franchises.find(f => f.deviceId === deviceId);
+                
+                if (!franchise) {
+                    throw Object.assign(new Error('Franchise not found'), { code: 'NOT_FOUND' });
+                }
+
+                // Validate that all content IDs exist
+                const validIds = contentIds.filter(id => data.content.some(c => c.id === id));
+                const invalidIds = contentIds.filter(id => !data.content.some(c => c.id === id));
+
+                if (invalidIds.length > 0) {
+                    console.warn(`[Assignments] Invalid content IDs ignored: ${invalidIds.join(', ')}`);
+                }
+
+                data.assignments[deviceId] = validIds;
+
+                return {
+                    data: {
+                        deviceId,
+                        assignedContent: validIds,
+                        invalidIds: invalidIds.length > 0 ? invalidIds : undefined,
+                    },
+                    audit: { action: 'UPDATE_ASSIGNMENTS', details: { deviceId, count: validIds.length } },
+                };
+            });
+
+            return response.success(res, result, 'Assignments updated successfully');
+        } catch (err) {
+            if (err.code === 'NOT_FOUND') {
+                return response.notFound(res, err.message);
+            }
+            next(err);
+        }
+    });
+
+    /**
+     * GET /api/assignments
+     * Get all assignments (ADMIN)
+     */
+    router.get('/', requireAdmin, (req, res) => {
+        const data = db.load();
+        
+        // Enrich with franchise and content details
+        const enrichedAssignments = Object.entries(data.assignments).map(([deviceId, contentIds]) => {
+            const franchise = data.franchises.find(f => f.deviceId === deviceId);
+            const contents = contentIds.map(id => {
+                const content = data.content.find(c => c.id === id);
+                return content ? { id: content.id, name: content.name, type: content.type } : null;
+            }).filter(Boolean);
+
+            return {
+                deviceId,
+                franchise: franchise ? { id: franchise.id, name: franchise.name, location: franchise.location } : null,
+                contentCount: contents.length,
+                contents,
+            };
+        });
+
+        return response.success(res, enrichedAssignments);
+    });
+
+    /**
+     * GET /api/assignments/:deviceId
+     * Get assignments for a specific device (ADMIN)
+     */
+    router.get('/:deviceId', requireAdmin, (req, res) => {
+        const { deviceId } = req.params;
+        const data = db.load();
+        
+        const franchise = data.franchises.find(f => f.deviceId === deviceId);
+        
+        if (!franchise) {
+            return response.notFound(res, 'Franchise not found');
+        }
+
+        const contentIds = data.assignments[deviceId] || [];
+        const contents = contentIds.map(id => data.content.find(c => c.id === id)).filter(Boolean);
+
+        return response.success(res, {
+            deviceId,
+            franchise: { id: franchise.id, name: franchise.name, location: franchise.location },
+            assignments: contents,
+        });
+    });
+
+    /**
+     * DELETE /api/assignments/:deviceId
+     * Clear all assignments for a device (ADMIN)
+     */
+    router.delete('/:deviceId', requireAdmin, (req, res, next) => {
+        try {
+            const { deviceId } = req.params;
+
+            db.transact((data) => {
+                const franchise = data.franchises.find(f => f.deviceId === deviceId);
+                
+                if (!franchise) {
+                    throw Object.assign(new Error('Franchise not found'), { code: 'NOT_FOUND' });
+                }
+
+                const previousCount = (data.assignments[deviceId] || []).length;
+                data.assignments[deviceId] = [];
+
+                return {
+                    audit: { action: 'CLEAR_ASSIGNMENTS', details: { deviceId, previousCount } },
+                };
+            });
+
+            return response.success(res, null, 'Assignments cleared successfully');
+        } catch (err) {
+            if (err.code === 'NOT_FOUND') {
+                return response.notFound(res, err.message);
+            }
+            next(err);
+        }
+    });
+
+    /**
+     * POST /api/assignments/:deviceId/add
+     * Add content to existing assignments (ADMIN)
+     */
+    router.post('/:deviceId/add', requireAdmin, (req, res, next) => {
+        try {
+            const { deviceId } = req.params;
+            const { contentIds } = req.body;
+
+            if (!Array.isArray(contentIds)) {
+                return response.badRequest(res, 'contentIds must be an array');
+            }
+
+            const result = db.transact((data) => {
+                const franchise = data.franchises.find(f => f.deviceId === deviceId);
+                
+                if (!franchise) {
+                    throw Object.assign(new Error('Franchise not found'), { code: 'NOT_FOUND' });
+                }
+
+                const currentAssignments = data.assignments[deviceId] || [];
+                const validNewIds = contentIds.filter(id => 
+                    data.content.some(c => c.id === id) && !currentAssignments.includes(id)
+                );
+
+                data.assignments[deviceId] = [...currentAssignments, ...validNewIds];
+
+                return {
+                    data: {
+                        deviceId,
+                        added: validNewIds.length,
+                        total: data.assignments[deviceId].length,
+                    },
+                    audit: { action: 'ADD_ASSIGNMENTS', details: { deviceId, added: validNewIds.length } },
+                };
+            });
+
+            return response.success(res, result, 'Content added to assignments');
+        } catch (err) {
+            if (err.code === 'NOT_FOUND') {
+                return response.notFound(res, err.message);
+            }
+            next(err);
+        }
+    });
+
+    /**
+     * POST /api/assignments/:deviceId/remove
+     * Remove content from assignments (ADMIN)
+     */
+    router.post('/:deviceId/remove', requireAdmin, (req, res, next) => {
+        try {
+            const { deviceId } = req.params;
+            const { contentIds } = req.body;
+
+            if (!Array.isArray(contentIds)) {
+                return response.badRequest(res, 'contentIds must be an array');
+            }
+
+            const result = db.transact((data) => {
+                const franchise = data.franchises.find(f => f.deviceId === deviceId);
+                
+                if (!franchise) {
+                    throw Object.assign(new Error('Franchise not found'), { code: 'NOT_FOUND' });
+                }
+
+                const currentAssignments = data.assignments[deviceId] || [];
+                data.assignments[deviceId] = currentAssignments.filter(id => !contentIds.includes(id));
+
+                return {
+                    data: {
+                        deviceId,
+                        removed: currentAssignments.length - data.assignments[deviceId].length,
+                        total: data.assignments[deviceId].length,
+                    },
+                    audit: { action: 'REMOVE_ASSIGNMENTS', details: { deviceId, removed: contentIds.length } },
+                };
+            });
+
+            return response.success(res, result, 'Content removed from assignments');
+        } catch (err) {
+            if (err.code === 'NOT_FOUND') {
+                return response.notFound(res, err.message);
+            }
+            next(err);
+        }
+    });
+
+    return router;
+};
+
+module.exports = createRouter;

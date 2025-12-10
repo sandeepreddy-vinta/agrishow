@@ -1,0 +1,62 @@
+# ===== ENVIRONMENT FILES (CRITICAL - NEVER COMMIT) =====
+.env
+.env.local
+.env.*.local
+*.env
+.env.production
+.env.development
+
+# ===== BACKEND =====
+backend/node_modules/
+backend/.env
+backend/database.json
+backend/audit.log
+backend/backups/
+backend/content/
+backend/coverage/
+
+# ===== ADMIN DASHBOARD =====
+admin-dashboard/node_modules/
+admin-dashboard/dist/
+admin-dashboard/.env
+
+# ===== DEVICE CLIENT (Android) =====
+device-client/.gradle/
+device-client/build/
+device-client/app/build/
+device-client/local.properties
+device-client/.idea/
+device-client/*.iml
+device-client/app/*.iml
+device-client/captures/
+device-client/.externalNativeBuild/
+device-client/.cxx/
+
+# ===== GRADLE =====
+.gradle/
+build/
+*.gradle.kts.swp
+gradle-8.6-bin.zip
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# ===== OS FILES =====
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ===== LOGS =====
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===== MISC =====
+*.tmp
+*.temp
+*.bak
