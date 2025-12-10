@@ -51,7 +51,19 @@ const createRouter = (db, contentDir) => {
     const upload = multer({
         storage: useGCS ? memoryStorage : diskStorage,
         limits: { fileSize: config.maxFileSize },
-        fileFilter,
+        fileFilter: (req, file, cb) => {
+            console.log(`[Upload Debug] Processing file: ${file.originalname}`);
+            console.log(`[Upload Debug] Mimetype: ${file.mimetype}`);
+            console.log(`[Upload Debug] Storage Mode: ${useGCS ? 'GCS (Memory)' : 'Disk'}`);
+            
+            // Allow all types for debugging if it matches broadly
+            if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
+                cb(null, true);
+            } else {
+                console.log(`[Upload Debug] Rejected mimetype: ${file.mimetype}`);
+                cb(new Error(`Invalid file type: ${file.mimetype}`));
+            }
+        },
     });
 
     /**
@@ -59,15 +71,19 @@ const createRouter = (db, contentDir) => {
      * Upload new content (ADMIN)
      */
     router.post('/upload', requireAdmin, (req, res, next) => {
+        console.log('[Upload Debug] Request received');
+        
         upload.single('file')(req, res, async (err) => {
             if (err) {
+                console.error('[Upload Debug] Multer Error:', err);
                 if (err.code === 'LIMIT_FILE_SIZE') {
                     return response.badRequest(res, `File too large. Maximum size: ${config.maxFileSize / (1024 * 1024)}MB`);
                 }
-                return response.badRequest(res, err.message);
+                return response.badRequest(res, `Upload error: ${err.message}`);
             }
 
             if (!req.file) {
+                console.error('[Upload Debug] No file in request. Body:', req.body);
                 return response.badRequest(res, 'No file provided');
             }
 
