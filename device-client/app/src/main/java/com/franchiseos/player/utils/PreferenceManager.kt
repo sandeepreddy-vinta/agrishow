@@ -13,6 +13,12 @@ class PreferenceManager(context: Context) {
         private const val KEY_DEVICE_TOKEN = "device_token"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_IS_CONFIGURED = "is_configured"
+        private const val KEY_PHONE_NUMBER = "phone_number"
+        private const val KEY_PARTNER_NAME = "partner_name"
+        private const val KEY_PARTNER_ID = "partner_id"
+        
+        // Production API URL - Update this with your Cloud Run URL
+        const val PRODUCTION_API_URL = "https://agrishow1-752262898671.asia-south1.run.app/api"
     }
     
     fun saveApiUrl(url: String) {
@@ -20,7 +26,7 @@ class PreferenceManager(context: Context) {
     }
     
     fun getApiUrl(): String {
-        return prefs.getString(KEY_API_URL, "") ?: ""
+        return prefs.getString(KEY_API_URL, PRODUCTION_API_URL) ?: PRODUCTION_API_URL
     }
     
     fun saveDeviceToken(token: String) {
@@ -45,6 +51,50 @@ class PreferenceManager(context: Context) {
     
     fun isConfigured(): Boolean {
         return prefs.getBoolean(KEY_IS_CONFIGURED, false)
+    }
+    
+    fun savePhoneNumber(phone: String) {
+        prefs.edit().putString(KEY_PHONE_NUMBER, phone).apply()
+    }
+    
+    fun getPhoneNumber(): String {
+        return prefs.getString(KEY_PHONE_NUMBER, "") ?: ""
+    }
+    
+    fun savePartnerName(name: String) {
+        prefs.edit().putString(KEY_PARTNER_NAME, name).apply()
+    }
+    
+    fun getPartnerName(): String {
+        return prefs.getString(KEY_PARTNER_NAME, "") ?: ""
+    }
+    
+    fun savePartnerId(id: String) {
+        prefs.edit().putString(KEY_PARTNER_ID, id).apply()
+    }
+    
+    fun getPartnerId(): String {
+        return prefs.getString(KEY_PARTNER_ID, "") ?: ""
+    }
+    
+    fun saveAllCredentials(
+        deviceToken: String,
+        deviceId: String,
+        partnerId: String,
+        partnerName: String,
+        phone: String,
+        apiUrl: String
+    ) {
+        prefs.edit().apply {
+            putString(KEY_DEVICE_TOKEN, deviceToken)
+            putString(KEY_DEVICE_ID, deviceId)
+            putString(KEY_PARTNER_ID, partnerId)
+            putString(KEY_PARTNER_NAME, partnerName)
+            putString(KEY_PHONE_NUMBER, phone)
+            putString(KEY_API_URL, apiUrl)
+            putBoolean(KEY_IS_CONFIGURED, true)
+            apply()
+        }
     }
     
     fun clearAll() {

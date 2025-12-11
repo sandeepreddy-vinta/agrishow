@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
-import { MapPin, Monitor, MoreHorizontal, Power, Trash2, Edit } from 'lucide-react';
+import { MapPin, Monitor, MoreHorizontal, Power, Trash2, Edit, Phone, Smartphone } from 'lucide-react';
 
 const FranchiseCard = ({ franchise, onEdit, onDelete }) => {
     const isOnline = franchise.status === 'online';
     const [showMenu, setShowMenu] = useState(false);
+    const isPhoneRegistered = franchise.authMethod === 'phone_otp' || franchise.phone;
 
     return (
         <div className="glass-panel p-6 hover:border-primary/30 transition-all group">
             <div className="flex items-start justify-between mb-4">
                 <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-white">
-                    <Monitor size={24} className={isOnline ? 'text-success' : 'text-error'} />
+                    {isPhoneRegistered ? (
+                        <Smartphone size={24} className={isOnline ? 'text-success' : 'text-error'} />
+                    ) : (
+                        <Monitor size={24} className={isOnline ? 'text-success' : 'text-error'} />
+                    )}
                 </div>
                 <div className="relative">
                     <button 
@@ -46,10 +51,16 @@ const FranchiseCard = ({ franchise, onEdit, onDelete }) => {
             </div>
 
             <h3 className="text-xl font-bold text-white mb-1">{franchise.name}</h3>
-            <div className="flex items-center gap-2 text-muted text-sm mb-4">
+            <div className="flex items-center gap-2 text-muted text-sm mb-2">
                 <MapPin size={14} />
                 <span>{franchise.location}</span>
             </div>
+            {franchise.phone && (
+                <div className="flex items-center gap-2 text-muted text-sm mb-4">
+                    <Phone size={14} />
+                    <span>+{franchise.phone}</span>
+                </div>
+            )}
 
             <div className="space-y-3">
                 <div className="flex items-center justify-between text-sm">

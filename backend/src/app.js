@@ -17,6 +17,7 @@ const createContentRoutes = require('./routes/content');
 const createAssignmentRoutes = require('./routes/assignments');
 const createDeviceRoutes = require('./routes/device');
 const createStatsRoutes = require('./routes/stats');
+const createDeviceAuthRoutes = require('./routes/deviceAuth');
 
 const createApp = (db, contentDir, backupDir) => {
     const app = express();
@@ -78,6 +79,7 @@ const createApp = (db, contentDir, backupDir) => {
 
     // --- API Routes ---
     app.use('/api/auth', createAuthRoutes);
+    app.use('/api/auth/device', createDeviceAuthRoutes(db)); // Phone OTP auth for TV devices
     app.use('/api/franchises', createFranchiseRoutes(db));
     app.use('/api/content', createContentRoutes(db, contentDir));
     app.use('/api/assignments', createAssignmentRoutes(db));
