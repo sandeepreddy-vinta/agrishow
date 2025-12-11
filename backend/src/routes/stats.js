@@ -13,25 +13,33 @@ const createRouter = (db, backupDir) => {
 
     /**
      * GET /api/health
-     * Health check endpoint (public)
+     * Health check endpoint (public) - responds immediately for Cloud Run
      */
     router.get('/health', async (req, res) => {
+        // Always return 200 for basic health check (Cloud Run startup probe)
+        const baseResponse = {
+            status: 'healthy',
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString(),
+        };
+
         try {
+            // Try to get database info, but don't fail if not ready
             const data = await db.load();
             const backupStats = fs.existsSync(backupDir) ? 'Available' : 'No Backups';
             
             return response.success(res, {
-                status: 'healthy',
+                ...baseResponse,
                 version: (data._metadata && data._metadata.version) || 0,
-                uptime: process.uptime(),
-                timestamp: new Date().toISOString(),
                 database: 'connected',
                 backupSystem: backupStats,
             });
         } catch (err) {
-            return response.error(res, 'Health check failed', 503, { 
-                status: 'unhealthy',
-                error: err.message,
+            // Database not ready yet, but server is running
+            return response.success(res, {
+                ...baseResponse,
+                database: 'initializing',
+                message: 'Server is starting, database connecting...',
             });
         }
     });
