@@ -39,7 +39,7 @@ const Layout = () => {
             <SidebarItem to="/" icon={LayoutDashboard} label="Dashboard" onClick={onItemClick} />
             <SidebarItem to="/live" icon={Activity} label="Live Monitor" onClick={onItemClick} />
             <SidebarItem to="/content" icon={Folder} label="Content Library" onClick={onItemClick} />
-            <SidebarItem to="/franchises" icon={Users} label="Franchises" onClick={onItemClick} />
+            <SidebarItem to="/franchises" icon={Users} label="Partners" onClick={onItemClick} />
             <SidebarItem to="/assignments" icon={Share2} label="Assignments" onClick={onItemClick} />
             <SidebarItem to="/analytics" icon={BarChart3} label="Analytics" onClick={onItemClick} />
             <SidebarItem to="/settings" icon={Settings} label="Settings" onClick={onItemClick} />
@@ -52,10 +52,10 @@ const Layout = () => {
             <aside className="w-64 p-6 hidden md:flex flex-col gap-6 sticky top-0 h-screen border-r border-white/5 bg-surface/30 backdrop-blur-xl">
                 <div className="flex items-center gap-3 px-2">
                     <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20">
-                        <span className="font-bold text-white">F</span>
+                        <span className="font-bold text-white">A</span>
                     </div>
                     <h1 className="text-xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-                        FranchiseOS
+                        AgriShow
                     </h1>
                 </div>
 
@@ -101,9 +101,9 @@ const Layout = () => {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary to-accent flex items-center justify-center">
-                            <span className="font-bold text-white">F</span>
+                            <span className="font-bold text-white">A</span>
                         </div>
-                        <h1 className="text-xl font-bold text-white">FranchiseOS</h1>
+                        <h1 className="text-xl font-bold text-white">AgriShow</h1>
                     </div>
                     <button 
                         onClick={() => setMobileMenuOpen(false)}
@@ -142,7 +142,7 @@ const Layout = () => {
                     >
                         <Menu size={24} />
                     </button>
-                    <div className="font-bold md:hidden">FranchiseOS</div>
+                    <div className="font-bold md:hidden">AgriShow</div>
                     <div className="hidden md:block" />
                     {user && (
                         <div className="text-right hidden md:block">

@@ -22,7 +22,7 @@ const createRouter = (db) => {
                 const franchise = data.franchises.find(f => f.deviceId === deviceId);
                 
                 if (!franchise) {
-                    throw Object.assign(new Error('Franchise not found'), { code: 'NOT_FOUND' });
+                    throw Object.assign(new Error('Partner not found'), { code: 'NOT_FOUND' });
                 }
 
                 // Validate that all content IDs exist
@@ -96,7 +96,7 @@ const createRouter = (db) => {
             const franchise = data.franchises.find(f => f.deviceId === deviceId);
         
         if (!franchise) {
-            return response.notFound(res, 'Franchise not found');
+            return response.notFound(res, 'Partner not found');
         }
 
         const contentIds = data.assignments[deviceId] || [];
@@ -124,7 +124,7 @@ const createRouter = (db) => {
                 const franchise = data.franchises.find(f => f.deviceId === deviceId);
                 
                 if (!franchise) {
-                    throw Object.assign(new Error('Franchise not found'), { code: 'NOT_FOUND' });
+                    throw Object.assign(new Error('Partner not found'), { code: 'NOT_FOUND' });
                 }
 
                 const previousCount = (data.assignments[deviceId] || []).length;
@@ -161,7 +161,7 @@ const createRouter = (db) => {
                 const franchise = data.franchises.find(f => f.deviceId === deviceId);
                 
                 if (!franchise) {
-                    throw Object.assign(new Error('Franchise not found'), { code: 'NOT_FOUND' });
+                    throw Object.assign(new Error('Partner not found'), { code: 'NOT_FOUND' });
                 }
 
                 const currentAssignments = data.assignments[deviceId] || [];
@@ -207,7 +207,7 @@ const createRouter = (db) => {
                 const franchise = data.franchises.find(f => f.deviceId === deviceId);
                 
                 if (!franchise) {
-                    throw Object.assign(new Error('Franchise not found'), { code: 'NOT_FOUND' });
+                    throw Object.assign(new Error('Partner not found'), { code: 'NOT_FOUND' });
                 }
 
                 const currentAssignments = data.assignments[deviceId] || [];

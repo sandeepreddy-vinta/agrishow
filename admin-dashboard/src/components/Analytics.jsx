@@ -253,7 +253,7 @@ const Analytics = () => {
                             {topDevices.slice(0, 6).map((device, i) => (
                                 <div key={device.deviceId} className="p-4 bg-white/5 rounded-xl border border-white/5">
                                     <div className="flex items-center justify-between mb-2">
-                                        <h4 className="text-white font-medium truncate">{device.franchiseName}</h4>
+                                        <h4 className="text-white font-medium truncate">{device.partnerName}</h4>
                                         <span className="text-xs text-muted">#{i + 1}</span>
                                     </div>
                                     <p className="text-xs text-muted mb-3 truncate">{device.location}</p>
@@ -312,7 +312,7 @@ const Analytics = () => {
                                             </span>
                                         </td>
                                         <td className="py-3 text-white text-sm truncate max-w-[200px]">{event.contentName}</td>
-                                        <td className="py-3 text-muted text-sm truncate max-w-[150px]">{event.franchiseName}</td>
+                                        <td className="py-3 text-muted text-sm truncate max-w-[150px]">{event.partnerName}</td>
                                     </tr>
                                 ))}
                             </tbody>

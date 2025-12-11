@@ -221,13 +221,13 @@ const RealtimeMonitor = () => {
                     <Monitor size={48} className="mx-auto text-muted mb-4" />
                     <h3 className="text-xl font-bold text-white mb-2">No Devices Registered</h3>
                     <p className="text-muted">
-                        Register franchises to start monitoring their devices in real-time.
+                        Register partners to start monitoring their devices in real-time.
                     </p>
                     <button
                         onClick={() => window.location.href = '/franchises'}
                         className="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                     >
-                        Add Franchise
+                        Add Partner
                     </button>
                 </div>
             )}

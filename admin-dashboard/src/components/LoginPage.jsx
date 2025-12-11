@@ -37,7 +37,7 @@ const LoginPage = () => {
         <div className="min-h-screen bg-background flex items-center justify-center p-4">
             <div className="w-full max-w-md">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">FranchiseOS</h1>
+                    <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">AgriShow</h1>
                     <p className="text-muted mt-2">Sign in to your dashboard</p>
                 </div>
 
@@ -60,7 +60,7 @@ const LoginPage = () => {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     className="w-full pl-10 pr-4 py-2 bg-black/20 border border-white/10 rounded-lg text-white focus:outline-none focus:border-primary transition-colors"
-                                    placeholder="admin@franchiseos.com"
+                                    placeholder="admin@agrishow.com"
                                 />
                             </div>
                         </div>
@@ -96,7 +96,7 @@ const LoginPage = () => {
                         </button>
 
                         <p className="text-center text-muted text-sm">
-                            Default: admin@franchiseos.com / Admin@123
+                            Default: admin@agrishow.com / Admin@123
                         </p>
                     </form>
                 </div>

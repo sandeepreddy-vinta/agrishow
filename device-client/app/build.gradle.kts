@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.franchiseos.player"
+    namespace = "com.agrishow.player"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.franchiseos.player"
+        applicationId = "com.agrishow.player"
         minSdk = 21
         targetSdk = 34
         versionCode = 1

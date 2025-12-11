@@ -16,7 +16,7 @@ const Dashboard = () => {
 
             // Transform API data to StatCard format - ALL REAL DATA
             const formattedStats = [
-                { title: 'Total Franchises', value: data.franchises?.total?.toString() || '0', change: `${data.franchises?.online || 0} Online`, trend: 'neutral', icon: Users, color: 'primary' },
+                { title: 'Total Partners', value: data.franchises?.total?.toString() || '0', change: `${data.franchises?.online || 0} Online`, trend: 'neutral', icon: Users, color: 'primary' },
                 { title: 'Online Screens', value: data.franchises?.online?.toString() || '0', change: 'Real-time', trend: 'up', icon: Monitor, color: 'success' },
                 { title: 'Content Items', value: data.content?.total?.toString() || '0', change: `${data.content?.videos || 0} videos, ${data.content?.images || 0} images`, trend: 'neutral', icon: Folder, color: 'secondary' },
                 { title: 'Active Assignments', value: data.assignments?.totalDevicesWithContent?.toString() || '0', change: 'Devices with content', trend: 'neutral', icon: Share2, color: 'accent' },
@@ -26,7 +26,7 @@ const Dashboard = () => {
             console.error('Failed to fetch stats:', error);
             // Fallback on error
             setStatsData([
-                { title: 'Total Franchises', value: '-', change: '-', trend: 'neutral', icon: Users, color: 'primary' },
+                { title: 'Total Partners', value: '-', change: '-', trend: 'neutral', icon: Users, color: 'primary' },
                 { title: 'Online Screens', value: '-', change: '-', trend: 'neutral', icon: Monitor, color: 'success' },
                 { title: 'Content Items', value: '-', change: '-', trend: 'neutral', icon: Folder, color: 'secondary' },
                 { title: 'Active Assignments', value: '-', change: '-', trend: 'neutral', icon: Share2, color: 'accent' },
@@ -101,7 +101,7 @@ const Dashboard = () => {
                             className="w-full px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-lg transition-colors text-left flex items-center gap-3"
                         >
                             <Users size={20} />
-                            <span className="font-medium">Add Franchise</span>
+                            <span className="font-medium">Add Partner</span>
                         </button>
                         <button 
                             onClick={() => window.location.href = '/assignments'}

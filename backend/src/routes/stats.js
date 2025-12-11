@@ -233,7 +233,7 @@ const createRouter = (db, backupDir) => {
                 const franchise = data.franchises.find(f => f.deviceId === deviceId);
                 return {
                     deviceId,
-                    franchiseName: franchise?.name || 'Unknown Device',
+                    partnerName: franchise?.name || 'Unknown Device',
                     location: franchise?.location || 'Unknown',
                     ...stats,
                 };
@@ -289,7 +289,7 @@ const createRouter = (db, backupDir) => {
                 recentEvents: filteredAnalytics.slice(-20).reverse().map(e => ({
                     ...e,
                     contentName: data.content.find(c => c.id === e.contentId)?.name || 'Unknown',
-                    franchiseName: data.franchises.find(f => f.deviceId === e.deviceId)?.name || 'Unknown',
+                    partnerName: data.franchises.find(f => f.deviceId === e.deviceId)?.name || 'Unknown',
                 })),
             });
         } catch (err) {

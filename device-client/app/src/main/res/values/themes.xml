@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Base application theme -->
-    <style name="Theme.FranchiseOSPlayer" parent="Theme.AppCompat.Light.DarkActionBar">
+    <style name="Theme.AgriShow" parent="Theme.AppCompat.Light.DarkActionBar">
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryDark">@color/primary_dark</item>
         <item name="colorAccent">@color/accent</item>
@@ -10,7 +10,7 @@
     </style>
 
     <!-- Fullscreen theme for player -->
-    <style name="Theme.FranchiseOSPlayer.Fullscreen" parent="Theme.FranchiseOSPlayer">
+    <style name="Theme.AgriShow.Fullscreen" parent="Theme.AgriShow">
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowContentOverlay">@null</item>
         <item name="windowActionBar">false</item>

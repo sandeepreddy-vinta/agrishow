@@ -1,5 +1,5 @@
 /**
- * Device Routes (for franchise devices/screens)
+ * Device Routes (for partner devices/screens)
  */
 
 const express = require('express');
@@ -21,7 +21,7 @@ const createRouter = (db) => {
                 const idx = data.franchises.findIndex(f => f.id === req.franchise.id);
                 
                 if (idx === -1) {
-                    throw new Error('Franchise not found during update');
+                    throw new Error('Partner not found during update');
                 }
 
                 data.franchises[idx].status = 'online';
@@ -69,7 +69,7 @@ const createRouter = (db) => {
 
             return response.success(res, {
                 deviceId,
-                franchiseName: req.franchise.name,
+                partnerName: req.franchise.name,
                 location: req.franchise.location,
                 playlist,
                 playlistCount: playlist.length,
@@ -82,7 +82,7 @@ const createRouter = (db) => {
 
     /**
      * GET /api/device/info
-     * Get device/franchise info
+     * Get device/partner info
      */
     router.get('/info', deviceAuth, (req, res) => {
         return response.success(res, {

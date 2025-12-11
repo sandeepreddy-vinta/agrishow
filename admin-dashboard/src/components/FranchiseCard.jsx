@@ -38,7 +38,7 @@ const FranchiseCard = ({ franchise, onEdit, onDelete }) => {
                                 className="w-full px-4 py-2 text-left text-red-400 hover:bg-red-500/10 flex items-center gap-2 rounded-b-lg"
                             >
                                 <Trash2 size={16} />
-                                Delete Franchise
+                                Delete Partner
                             </button>
                         </div>
                     )}

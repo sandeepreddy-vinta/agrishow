@@ -143,7 +143,7 @@ const AssignmentManager = () => {
         <div className="h-[calc(100vh-8rem)] flex flex-col gap-6 animate-in fade-in duration-500">
             <div>
                 <h1 className="text-3xl font-bold text-white">Content Assignment</h1>
-                <p className="text-muted mt-1">Drag and drop content to franchises.</p>
+                <p className="text-muted mt-1">Drag and drop content to partners.</p>
             </div>
 
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden">
@@ -174,10 +174,10 @@ const AssignmentManager = () => {
 
                 {/* Target Column */}
                 <div className="lg:col-span-2 glass-panel p-6 flex flex-col overflow-hidden">
-                    <h3 className="text-lg font-bold text-white mb-4">Franchises</h3>
+                    <h3 className="text-lg font-bold text-white mb-4">Partners</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 overflow-y-auto content-start pr-2 custom-scrollbar">
                         {franchises.length === 0 ? (
-                            <p className="text-muted text-center col-span-2">No franchises found.</p>
+                            <p className="text-muted text-center col-span-2">No partners found.</p>
                         ) : (
                             franchises.map(franchise => (
                                 <div

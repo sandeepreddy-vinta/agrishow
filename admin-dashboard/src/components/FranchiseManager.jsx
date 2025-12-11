@@ -29,14 +29,14 @@ const AddFranchiseModal = ({ isOpen, onClose, onAdd }) => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-[#1e293b] border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-white">Add New Franchise</h2>
+                    <h2 className="text-xl font-bold text-white">Add New Partner</h2>
                     <button onClick={onClose} className="text-muted hover:text-white transition-colors">
                         <X size={24} />
                     </button>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-muted mb-1">Franchise Name</label>
+                        <label className="block text-sm font-medium text-muted mb-1">Partner Name</label>
                         <input
                             type="text"
                             required
@@ -122,20 +122,20 @@ const FranchiseManager = () => {
             if (result.token) {
                 toast.success(
                     <div>
-                        <p className="font-bold mb-2">Franchise registered!</p>
+                        <p className="font-bold mb-2">Partner registered!</p>
                         <p className="text-xs mb-1">Device Token (save this!):</p>
                         <code className="text-xs bg-black/30 px-2 py-1 rounded block break-all">{result.token}</code>
                     </div>,
                     { duration: 10000 }
                 );
             } else {
-                toast.success('Franchise registered successfully');
+                toast.success('Partner registered successfully');
             }
             
             fetchFranchises();
         } catch (error) {
             console.error(error);
-            const msg = error.response?.data?.message || error.response?.data?.error || 'Failed to register franchise';
+            const msg = error.response?.data?.message || error.response?.data?.error || 'Failed to register partner';
             toast.error(msg);
             throw error;
         }
@@ -146,14 +146,14 @@ const FranchiseManager = () => {
             return;
         }
 
-        const toastId = toast.loading('Deleting franchise...');
+        const toastId = toast.loading('Deleting partner...');
         try {
             await api.delete(`/franchises/${franchise.id}`);
-            toast.success('Franchise deleted successfully', { id: toastId });
+            toast.success('Partner deleted successfully', { id: toastId });
             fetchFranchises();
         } catch (error) {
             console.error(error);
-            const msg = error.response?.data?.message || 'Failed to delete franchise';
+            const msg = error.response?.data?.message || 'Failed to delete partner';
             toast.error(msg, { id: toastId });
         }
     };
@@ -181,15 +181,15 @@ const FranchiseManager = () => {
 
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-white">Franchise Management</h1>
-                    <p className="text-muted mt-1">Monitor and manage all franchise locations.</p>
+                    <h1 className="text-3xl font-bold text-white">Partner Management</h1>
+                    <p className="text-muted mt-1">Monitor and manage all partner locations.</p>
                 </div>
                 <button
                     onClick={() => setIsAddModalOpen(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors shadow-lg shadow-primary/25"
                 >
                     <Plus size={20} />
-                    <span>Add Franchise</span>
+                    <span>Add Partner</span>
                 </button>
             </div>
 
@@ -206,7 +206,7 @@ const FranchiseManager = () => {
 
             {franchises.length === 0 ? (
                 <div className="text-center py-12 text-muted">
-                    No franchises found. Click "Add Franchise" to register your first device.
+                    No partners found. Click "Add Partner" to register your first device.
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

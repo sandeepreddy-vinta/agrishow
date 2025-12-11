@@ -25,7 +25,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.FranchiseOSPlayer"
+        android:theme="@style/Theme.AgriShow"
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
@@ -34,7 +34,7 @@
             android:name=".ui.SetupActivity"
             android:exported="true"
             android:screenOrientation="landscape"
-            android:theme="@style/Theme.FranchiseOSPlayer">
+            android:theme="@style/Theme.AgriShow">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -47,7 +47,7 @@
             android:name=".ui.PlayerActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="landscape"
-            android:theme="@style/Theme.FranchiseOSPlayer.Fullscreen" />
+            android:theme="@style/Theme.AgriShow.Fullscreen" />
 
         <!-- Heartbeat Service -->
         <service

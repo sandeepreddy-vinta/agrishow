@@ -1,5 +1,5 @@
 /**
- * Franchise Routes
+ * Partner Routes
  */
 
 const express = require('express');
@@ -13,7 +13,7 @@ const createRouter = (db) => {
 
     /**
      * POST /api/franchises
-     * Register a new franchise (ADMIN)
+     * Register a new partner (ADMIN)
      */
     router.post('/', requireAdmin, validateBody('createFranchise'), async (req, res, next) => {
         try {
@@ -40,14 +40,14 @@ const createRouter = (db) => {
 
                 return {
                     data: { ...newFranchise, token: deviceToken },
-                    audit: { action: 'REGISTER_FRANCHISE', details: { name, deviceId } },
+                    audit: { action: 'REGISTER_PARTNER', details: { name, deviceId } },
                 };
             });
 
             return response.created(res, {
                 ...result,
                 message: 'SAVE THE TOKEN - it cannot be retrieved again!',
-            }, 'Franchise registered successfully');
+            }, 'Partner registered successfully');
         } catch (err) {
             if (err.code === 'CONFLICT') {
                 return response.conflict(res, err.message);
@@ -58,7 +58,7 @@ const createRouter = (db) => {
 
     /**
      * GET /api/franchises
-     * Get all franchises (ADMIN) - tokens masked
+     * Get all partners (ADMIN) - tokens masked
      */
     router.get('/', requireAdmin, async (req, res) => {
         try {
@@ -69,13 +69,13 @@ const createRouter = (db) => {
             }));
             return response.success(res, safeList);
         } catch (err) {
-            return response.error(res, 'Failed to load franchises', 500);
+            return response.error(res, 'Failed to load partners', 500);
         }
     });
 
     /**
      * GET /api/franchises/:id
-     * Get single franchise by ID (ADMIN)
+     * Get single partner by ID (ADMIN)
      */
     router.get('/:id', requireAdmin, async (req, res) => {
         try {
@@ -83,18 +83,18 @@ const createRouter = (db) => {
             const franchise = data.franchises.find(f => f.id === req.params.id);
             
             if (!franchise) {
-                return response.notFound(res, 'Franchise not found');
+                return response.notFound(res, 'Partner not found');
             }
 
             return response.success(res, { ...franchise, token: '***MASKED***' });
         } catch (err) {
-            return response.error(res, 'Failed to load franchise', 500);
+            return response.error(res, 'Failed to load partner', 500);
         }
     });
 
     /**
      * PUT /api/franchises/:id
-     * Update franchise (ADMIN)
+     * Update partner (ADMIN)
      */
     router.put('/:id', requireAdmin, async (req, res, next) => {
         try {
@@ -105,7 +105,7 @@ const createRouter = (db) => {
                 const idx = data.franchises.findIndex(f => f.id === id);
                 
                 if (idx === -1) {
-                    throw Object.assign(new Error('Franchise not found'), { code: 'NOT_FOUND' });
+                    throw Object.assign(new Error('Partner not found'), { code: 'NOT_FOUND' });
                 }
 
                 if (name) data.franchises[idx].name = name;
@@ -114,11 +114,11 @@ const createRouter = (db) => {
 
                 return {
                     data: { ...data.franchises[idx], token: '***MASKED***' },
-                    audit: { action: 'UPDATE_FRANCHISE', details: { id, name, location } },
+                    audit: { action: 'UPDATE_PARTNER', details: { id, name, location } },
                 };
             });
 
-            return response.success(res, result, 'Franchise updated successfully');
+            return response.success(res, result, 'Partner updated successfully');
         } catch (err) {
             if (err.code === 'NOT_FOUND') {
                 return response.notFound(res, err.message);
@@ -129,7 +129,7 @@ const createRouter = (db) => {
 
     /**
      * DELETE /api/franchises/:id
-     * Delete franchise (ADMIN)
+     * Delete partner (ADMIN)
      */
     router.delete('/:id', requireAdmin, async (req, res, next) => {
         try {
@@ -139,7 +139,7 @@ const createRouter = (db) => {
                 const idx = data.franchises.findIndex(f => f.id === id);
                 
                 if (idx === -1) {
-                    throw Object.assign(new Error('Franchise not found'), { code: 'NOT_FOUND' });
+                    throw Object.assign(new Error('Partner not found'), { code: 'NOT_FOUND' });
                 }
 
                 const franchise = data.franchises[idx];
@@ -149,11 +149,11 @@ const createRouter = (db) => {
                 delete data.assignments[franchise.deviceId];
 
                 return {
-                    audit: { action: 'DELETE_FRANCHISE', details: { id, deviceId: franchise.deviceId } },
+                    audit: { action: 'DELETE_PARTNER', details: { id, deviceId: franchise.deviceId } },
                 };
             });
 
-            return response.success(res, null, 'Franchise deleted successfully');
+            return response.success(res, null, 'Partner deleted successfully');
         } catch (err) {
             if (err.code === 'NOT_FOUND') {
                 return response.notFound(res, err.message);
@@ -174,7 +174,7 @@ const createRouter = (db) => {
                 const idx = data.franchises.findIndex(f => f.id === id);
                 
                 if (idx === -1) {
-                    throw Object.assign(new Error('Franchise not found'), { code: 'NOT_FOUND' });
+                    throw Object.assign(new Error('Partner not found'), { code: 'NOT_FOUND' });
                 }
 
                 const newToken = crypto.randomUUID();
