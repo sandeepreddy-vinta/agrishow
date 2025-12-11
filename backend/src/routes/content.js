@@ -125,7 +125,7 @@ const createRouter = (db, contentDir) => {
                     uploadDate: new Date().toISOString(),
                 };
 
-                db.transact((data) => {
+                await db.transact((data) => {
                     data.content.push(newContent);
                     return {
                         data: newContent,
@@ -152,36 +152,44 @@ const createRouter = (db, contentDir) => {
      * GET /api/content
      * Get all content (ADMIN)
      */
-    router.get('/', requireAdmin, (req, res) => {
-        const data = db.load();
-        return response.success(res, data.content);
+    router.get('/', requireAdmin, async (req, res) => {
+        try {
+            const data = await db.load();
+            return response.success(res, data.content);
+        } catch (err) {
+            return response.error(res, 'Failed to load content', 500);
+        }
     });
 
     /**
      * GET /api/content/:id
      * Get single content item (ADMIN)
      */
-    router.get('/:id', requireAdmin, (req, res) => {
-        const data = db.load();
-        const content = data.content.find(c => c.id === req.params.id);
+    router.get('/:id', requireAdmin, async (req, res) => {
+        try {
+            const data = await db.load();
+            const content = data.content.find(c => c.id === req.params.id);
 
-        if (!content) {
-            return response.notFound(res, 'Content not found');
+            if (!content) {
+                return response.notFound(res, 'Content not found');
+            }
+
+            return response.success(res, content);
+        } catch (err) {
+            return response.error(res, 'Failed to load content', 500);
         }
-
-        return response.success(res, content);
     });
 
     /**
      * PUT /api/content/:id
      * Update content metadata (ADMIN)
      */
-    router.put('/:id', requireAdmin, (req, res, next) => {
+    router.put('/:id', requireAdmin, async (req, res, next) => {
         try {
             const { id } = req.params;
             const { name, duration } = req.body;
 
-            const result = db.transact((data) => {
+            const result = await db.transact((data) => {
                 const idx = data.content.findIndex(c => c.id === id);
 
                 if (idx === -1) {
@@ -216,7 +224,7 @@ const createRouter = (db, contentDir) => {
             const { id } = req.params;
             let fileToDelete = null;
 
-            db.transact((data) => {
+            await db.transact((data) => {
                 const idx = data.content.findIndex(c => c.id === id);
 
                 if (idx === -1) {

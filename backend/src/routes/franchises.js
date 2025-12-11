@@ -15,11 +15,11 @@ const createRouter = (db) => {
      * POST /api/franchises
      * Register a new franchise (ADMIN)
      */
-    router.post('/', requireAdmin, validateBody('createFranchise'), (req, res, next) => {
+    router.post('/', requireAdmin, validateBody('createFranchise'), async (req, res, next) => {
         try {
             const { name, location, deviceId } = req.validatedBody;
 
-            const result = db.transact((data) => {
+            const result = await db.transact((data) => {
                 if (data.franchises.find(f => f.deviceId === deviceId)) {
                     throw Object.assign(new Error('Device ID already registered'), { code: 'CONFLICT' });
                 }
@@ -60,40 +60,48 @@ const createRouter = (db) => {
      * GET /api/franchises
      * Get all franchises (ADMIN) - tokens masked
      */
-    router.get('/', requireAdmin, (req, res) => {
-        const data = db.load();
-        const safeList = data.franchises.map(f => ({
-            ...f,
-            token: '***MASKED***',
-        }));
-        return response.success(res, safeList);
+    router.get('/', requireAdmin, async (req, res) => {
+        try {
+            const data = await db.load();
+            const safeList = data.franchises.map(f => ({
+                ...f,
+                token: '***MASKED***',
+            }));
+            return response.success(res, safeList);
+        } catch (err) {
+            return response.error(res, 'Failed to load franchises', 500);
+        }
     });
 
     /**
      * GET /api/franchises/:id
      * Get single franchise by ID (ADMIN)
      */
-    router.get('/:id', requireAdmin, (req, res) => {
-        const data = db.load();
-        const franchise = data.franchises.find(f => f.id === req.params.id);
-        
-        if (!franchise) {
-            return response.notFound(res, 'Franchise not found');
-        }
+    router.get('/:id', requireAdmin, async (req, res) => {
+        try {
+            const data = await db.load();
+            const franchise = data.franchises.find(f => f.id === req.params.id);
+            
+            if (!franchise) {
+                return response.notFound(res, 'Franchise not found');
+            }
 
-        return response.success(res, { ...franchise, token: '***MASKED***' });
+            return response.success(res, { ...franchise, token: '***MASKED***' });
+        } catch (err) {
+            return response.error(res, 'Failed to load franchise', 500);
+        }
     });
 
     /**
      * PUT /api/franchises/:id
      * Update franchise (ADMIN)
      */
-    router.put('/:id', requireAdmin, (req, res, next) => {
+    router.put('/:id', requireAdmin, async (req, res, next) => {
         try {
             const { name, location } = req.body;
             const { id } = req.params;
 
-            const result = db.transact((data) => {
+            const result = await db.transact((data) => {
                 const idx = data.franchises.findIndex(f => f.id === id);
                 
                 if (idx === -1) {
@@ -123,11 +131,11 @@ const createRouter = (db) => {
      * DELETE /api/franchises/:id
      * Delete franchise (ADMIN)
      */
-    router.delete('/:id', requireAdmin, (req, res, next) => {
+    router.delete('/:id', requireAdmin, async (req, res, next) => {
         try {
             const { id } = req.params;
 
-            db.transact((data) => {
+            await db.transact((data) => {
                 const idx = data.franchises.findIndex(f => f.id === id);
                 
                 if (idx === -1) {
@@ -158,11 +166,11 @@ const createRouter = (db) => {
      * POST /api/franchises/:id/regenerate-token
      * Regenerate device token (ADMIN)
      */
-    router.post('/:id/regenerate-token', requireAdmin, (req, res, next) => {
+    router.post('/:id/regenerate-token', requireAdmin, async (req, res, next) => {
         try {
             const { id } = req.params;
 
-            const result = db.transact((data) => {
+            const result = await db.transact((data) => {
                 const idx = data.franchises.findIndex(f => f.id === id);
                 
                 if (idx === -1) {

@@ -1,59 +1,44 @@
 /**
  * Database Manager Service
- * Handles JSON file-based database operations with transactions and backups
+ * Handles persistence using Google Cloud Firestore
+ * Maintains compatibility with existing transaction pattern
  */
 
-const fs = require('fs');
-const path = require('path');
+const { Firestore } = require('@google-cloud/firestore');
 
 class DatabaseManager {
-    constructor(dbFile, auditLog, migrationsDir, backupModule) {
-        this.dbFile = dbFile;
-        this.auditLog = auditLog;
-        this.migrationsDir = migrationsDir;
-        this.backupModule = backupModule;
-        this.lock = false;
-        this.lockQueue = [];
-        this.data = null;
+    constructor() {
+        this.firestore = new Firestore();
+        this.collectionName = 'system';
+        this.docId = 'main';
+        this.docRef = this.firestore.collection(this.collectionName).doc(this.docId);
+        
+        // In-memory cache for fast reads (optional, but helpful for read-heavy/write-rare)
+        // However, for stateless Cloud Run, we should fetch fresh data often or rely on Firestore's consistency.
+        // To minimize reads, we can cache, but we must invalidate on write.
+        this.cache = null;
+        this.lastFetch = 0;
+        this.CACHE_TTL = 5000; // 5 seconds cache
     }
 
-    init() {
-        // Ensure Database Exists or Recover
-        if (!fs.existsSync(this.dbFile)) {
-            console.warn('[DB] Database file missing. Attempting restoration...');
-            let restored = false;
-            if (this.backupModule) {
-                restored = this.backupModule.restoreLatest();
+    async init() {
+        try {
+            const doc = await this.docRef.get();
+            if (!doc.exists) {
+                console.log('[DB] No database found in Firestore. Initializing new database...');
+                const emptyDb = this.getEmptyDatabase();
+                await this.docRef.set(emptyDb);
+                this.cache = emptyDb;
+            } else {
+                console.log('[DB] Connected to Firestore. Database loaded.');
+                this.cache = doc.data();
             }
-            if (!restored) {
-                console.log('[DB] No backup found. Initializing new database.');
-                this.write(this.getEmptyDatabase());
-            }
-        } else {
-            // Validate existing DB
-            try {
-                const content = fs.readFileSync(this.dbFile, 'utf8');
-                JSON.parse(content);
-                console.log('[DB] Database loaded successfully');
-            } catch (err) {
-                console.error('[DB] Corrupted database detected!');
-                if (this.backupModule && this.backupModule.restoreLatest()) {
-                    console.log('[DB] Recovered from backup.');
-                } else {
-                    console.error('[DB] CRITICAL: Could not recover database.');
-                    // Move corrupt file and start fresh
-                    const corruptPath = this.dbFile + '.corrupt.' + Date.now();
-                    fs.renameSync(this.dbFile, corruptPath);
-                    console.log(`[DB] Corrupt file moved to: ${corruptPath}`);
-                    this.write(this.getEmptyDatabase());
-                }
-            }
+            this.lastFetch = Date.now();
+            return this;
+        } catch (err) {
+            console.error('[DB] Failed to connect to Firestore:', err);
+            throw err;
         }
-
-        this.runMigrations();
-        this.startBackupSchedule();
-        
-        return this;
     }
 
     getEmptyDatabase() {
@@ -62,123 +47,101 @@ class DatabaseManager {
             content: [],
             assignments: {},
             analytics: [],
-            _metadata: { version: 0, createdAt: new Date().toISOString() },
+            _metadata: { version: 1, createdAt: new Date().toISOString() },
         };
     }
 
-    load() {
+    /**
+     * Load data from Firestore (or cache)
+     * Returns a PROMISE now (breaking change for synchronous callers)
+     */
+    async load() {
+        // If we have fresh cache, use it
+        if (this.cache && (Date.now() - this.lastFetch < this.CACHE_TTL)) {
+            return JSON.parse(JSON.stringify(this.cache));
+        }
+
         try {
-            return JSON.parse(fs.readFileSync(this.dbFile, 'utf8'));
+            const doc = await this.docRef.get();
+            if (!doc.exists) {
+                // Should not happen if init() ran, but handle gracefully
+                return this.getEmptyDatabase();
+            }
+            this.cache = doc.data();
+            this.lastFetch = Date.now();
+            return JSON.parse(JSON.stringify(this.cache));
         } catch (err) {
-            console.error('[DB] Failed to load database:', err.message);
+            console.error('[DB] Failed to load data:', err);
             throw err;
         }
     }
 
-    write(data) {
-        data._metadata = data._metadata || {};
-        data._metadata.lastModified = new Date().toISOString();
-        fs.writeFileSync(this.dbFile, JSON.stringify(data, null, 2));
-    }
-
     /**
-     * Atomic Transaction Wrapper with retry support
+     * Transactional update
+     * callback(data) -> result
+     * result can be { data: returnedValue, audit: { action, details } }
      */
-    async transactAsync(callback, maxRetries = 3) {
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-            if (!this.lock) {
-                return this.transact(callback);
-            }
-            await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
-        }
-        throw new Error('Database is locked. Try again later.');
-    }
-
-    /**
-     * Synchronous transaction (original behavior)
-     */
-    transact(callback) {
-        if (this.lock) {
-            throw new Error('Database is locked. Try again later.');
-        }
-
-        this.lock = true;
+    async transact(callback) {
         try {
-            const currentData = this.load();
-            // Deep copy to prevent reference mutation before commit
-            const dataCopy = JSON.parse(JSON.stringify(currentData));
+            let result;
+            let auditEntry;
 
-            const result = callback(dataCopy);
+            await this.firestore.runTransaction(async (t) => {
+                const doc = await t.get(this.docRef);
+                const currentData = doc.exists ? doc.data() : this.getEmptyDatabase();
+                
+                // Deep copy for the callback to modify
+                const dataProxy = JSON.parse(JSON.stringify(currentData));
 
-            // Commit
-            this.write(dataCopy);
-            this.lock = false;
-
-            // Audit Log
-            if (result && result.audit) {
-                this.logAudit(result.audit.action, result.audit.details);
-            }
-
-            return result.data !== undefined ? result.data : result;
-        } catch (err) {
-            this.lock = false;
-            console.error('[DB] Transaction failed. Rolled back.', err.message);
-            throw err;
-        }
-    }
-
-    logAudit(action, details) {
-        const logEntry = `[${new Date().toISOString()}] [${action}] ${JSON.stringify(details)}\n`;
-        fs.appendFile(this.auditLog, logEntry, (err) => {
-            if (err) console.error('[Audit] Failed to write log:', err);
-        });
-    }
-
-    startBackupSchedule() {
-        if (!this.backupModule) return;
-
-        // Run initial backup
-        console.log('[DB] Running initial backup...');
-        this.backupModule.backupDatabase();
-
-        // Schedule hourly backups
-        setInterval(() => {
-            console.log('[DB] Running scheduled backup...');
-            this.backupModule.backupDatabase();
-        }, 60 * 60 * 1000);
-    }
-
-    runMigrations() {
-        if (!fs.existsSync(this.migrationsDir)) return;
-
-        const db = this.load();
-        const currentVersion = (db._metadata && db._metadata.version) || 0;
-
-        const scripts = fs.readdirSync(this.migrationsDir)
-            .filter(f => f.endsWith('.js'))
-            .sort();
-
-        let updated = false;
-
-        scripts.forEach(script => {
-            const scriptPath = path.join(this.migrationsDir, script);
-            try {
-                const migration = require(scriptPath);
-                if (migration.version > currentVersion) {
-                    console.log(`[Migration] Applying ${script}...`);
-                    migration.up(db);
-                    db._metadata = db._metadata || {};
-                    db._metadata.version = migration.version;
-                    updated = true;
+                // Run business logic
+                const callbackResult = callback(dataProxy);
+                
+                // Handle different return types from callback
+                // 1. { data: ..., audit: ... }
+                // 2. data
+                if (callbackResult && typeof callbackResult === 'object' && callbackResult.audit) {
+                    result = callbackResult.data;
+                    auditEntry = callbackResult.audit;
+                } else {
+                    result = callbackResult;
                 }
-            } catch (err) {
-                console.error(`[Migration] Failed to load/run ${script}:`, err);
-            }
-        });
 
-        if (updated) {
-            this.write(db);
-            console.log('[Migration] Database schema updated.');
+                // Update metadata
+                dataProxy._metadata = dataProxy._metadata || {};
+                dataProxy._metadata.lastModified = new Date().toISOString();
+
+                // Commit to Firestore
+                t.set(this.docRef, dataProxy);
+                
+                // Update Cache
+                this.cache = dataProxy;
+                this.lastFetch = Date.now();
+            });
+
+            // Log audit asynchronously if needed (or separate collection)
+            if (auditEntry) {
+                this.logAudit(auditEntry.action, auditEntry.details);
+            }
+
+            return result;
+        } catch (err) {
+            console.error('[DB] Transaction failed:', err);
+            throw err;
+        }
+    }
+
+    /**
+     * Log to a separate collection 'audit_logs'
+     */
+    async logAudit(action, details) {
+        try {
+            await this.firestore.collection('audit_logs').add({
+                action,
+                details,
+                timestamp: new Date().toISOString()
+            });
+        } catch (err) {
+            console.error('[Audit] Failed to write log:', err);
         }
     }
 }

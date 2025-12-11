@@ -123,6 +123,11 @@ class PlayerActivity : AppCompatActivity() {
                     showStatus("Playing ${playlist.size} items")
                     progressBar.visibility = View.GONE
                     playCurrentItem()
+                    
+                    // Start background download of content
+                    launch {
+                        repository.downloadMissingContent(playlist)
+                    }
                 }
             } else {
                 val error = result.exceptionOrNull()?.message ?: "Unknown error"
@@ -158,7 +163,13 @@ class PlayerActivity : AppCompatActivity() {
         imageView.visibility = View.GONE
         playerView.visibility = View.VISIBLE
         
-        val mediaItem = MediaItem.fromUri(item.url)
+        val isLocal = item.localPath != null
+        val uri = item.localPath?.let { "file://$it" } ?: item.url
+        Log.d(TAG, "Playing video from: $uri")
+        
+        showPlaybackSource(isLocal)
+        
+        val mediaItem = MediaItem.fromUri(uri)
         exoPlayer?.setMediaItem(mediaItem)
         exoPlayer?.prepare()
         exoPlayer?.play()
@@ -171,9 +182,15 @@ class PlayerActivity : AppCompatActivity() {
         // Stop video player
         exoPlayer?.stop()
         
+        val isLocal = item.localPath != null
+        val uri = item.localPath?.let { "file://$it" } ?: item.url
+        Log.d(TAG, "Showing image from: $uri")
+        
+        showPlaybackSource(isLocal)
+        
         // Load image with Glide
         Glide.with(this)
-            .load(item.url)
+            .load(uri)
             .centerCrop()
             .into(imageView)
         
@@ -201,14 +218,19 @@ class PlayerActivity : AppCompatActivity() {
         }, PLAYLIST_REFRESH_INTERVAL)
     }
     
-    private fun showStatus(message: String) {
+    private fun showStatus(message: String, duration: Long = 3000) {
         tvStatus.text = message
         tvStatus.visibility = View.VISIBLE
         
-        // Hide status after 3 seconds
+        // Hide status after duration
         handler.postDelayed({
             tvStatus.visibility = View.GONE
-        }, 3000)
+        }, duration)
+    }
+
+    private fun showPlaybackSource(isLocal: Boolean) {
+        val source = if (isLocal) "💾 Local Storage" else "🌐 Network Stream"
+        showStatus(source, 2000)
     }
     
     override fun onResume() {

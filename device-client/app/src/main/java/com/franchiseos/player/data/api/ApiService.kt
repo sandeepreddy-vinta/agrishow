@@ -22,4 +22,8 @@ interface ApiService {
         @Header("X-Device-Token") deviceToken: String,
         @Body report: Map<String, Any>
     ): Response<Any>
+    
+    @GET
+    @Streaming
+    suspend fun downloadFile(@Url fileUrl: String): Response<okhttp3.ResponseBody>
 }

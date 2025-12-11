@@ -15,12 +15,8 @@ validateEnv();
 // Import modules
 const createApp = require('./src/app');
 const DatabaseManager = require('./src/services/database');
-const backupModule = require('./backup');
 
 // --- Paths ---
-const DB_FILE = path.join(__dirname, 'database.json');
-const AUDIT_LOG = path.join(__dirname, 'audit.log');
-const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 const CONTENT_DIR = path.join(__dirname, 'content');
 const BACKUP_DIR = path.join(__dirname, 'backups');
 
@@ -32,25 +28,42 @@ const BACKUP_DIR = path.join(__dirname, 'backups');
 });
 
 // --- Initialize Database ---
-const db = new DatabaseManager(DB_FILE, AUDIT_LOG, MIGRATIONS_DIR, backupModule).init();
-
-// --- Create Express App ---
-const app = createApp(db, CONTENT_DIR, BACKUP_DIR);
+const dbManager = new DatabaseManager();
 
 // --- Start Server ---
-const PORT = config.port;
+const startServer = async () => {
+    try {
+        const db = await dbManager.init();
+        
+        // --- Create Express App ---
+        // contentDir is still needed for local uploads if GCS fails or for temp storage
+        const app = createApp(db, CONTENT_DIR, BACKUP_DIR);
+        
+        const PORT = config.port;
 
-app.listen(PORT, () => {
-    console.log('');
-    console.log('╔════════════════════════════════════════════════════════╗');
-    console.log('║            FranchiseOS Backend API v2.0                ║');
-    console.log('╠════════════════════════════════════════════════════════╣');
-    console.log(`║  Server running on port: ${PORT}                          ║`);
-    console.log(`║  Environment: ${process.env.NODE_ENV || 'development'}                          ║`);
-    console.log(`║  Database version: ${db.load()._metadata?.version || 0}                              ║`);
-    console.log('╚════════════════════════════════════════════════════════╝');
-    console.log('');
-});
+        app.listen(PORT, async () => {
+            console.log('');
+            console.log('╔════════════════════════════════════════════════════════╗');
+            console.log('║            FranchiseOS Backend API v2.0                ║');
+            console.log('╠════════════════════════════════════════════════════════╣');
+            console.log(`║  Server running on port: ${PORT}                          ║`);
+            console.log(`║  Environment: ${process.env.NODE_ENV || 'development'}                          ║`);
+            try {
+                const data = await db.load();
+                console.log(`║  Database version: ${data._metadata?.version || 0}                              ║`);
+            } catch (e) {
+                console.log(`║  Database version: Unknown                                ║`);
+            }
+            console.log('╚════════════════════════════════════════════════════════╝');
+            console.log('');
+        });
+    } catch (err) {
+        console.error('Failed to start server:', err);
+        process.exit(1);
+    }
+};
+
+startServer();
 
 // --- Graceful Shutdown ---
 process.on('SIGTERM', () => {

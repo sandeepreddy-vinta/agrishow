@@ -14,11 +14,11 @@ const createRouter = (db) => {
      * POST /api/assignments
      * Assign content to a device (ADMIN)
      */
-    router.post('/', requireAdmin, validateBody('createAssignment'), (req, res, next) => {
+    router.post('/', requireAdmin, validateBody('createAssignment'), async (req, res, next) => {
         try {
             const { deviceId, contentIds } = req.validatedBody;
 
-            const result = db.transact((data) => {
+            const result = await db.transact((data) => {
                 const franchise = data.franchises.find(f => f.deviceId === deviceId);
                 
                 if (!franchise) {
@@ -58,11 +58,12 @@ const createRouter = (db) => {
      * GET /api/assignments
      * Get all assignments (ADMIN)
      */
-    router.get('/', requireAdmin, (req, res) => {
-        const data = db.load();
-        
-        // Enrich with franchise and content details
-        const enrichedAssignments = Object.entries(data.assignments).map(([deviceId, contentIds]) => {
+    router.get('/', requireAdmin, async (req, res) => {
+        try {
+            const data = await db.load();
+            
+            // Enrich with franchise and content details
+            const enrichedAssignments = Object.entries(data.assignments).map(([deviceId, contentIds]) => {
             const franchise = data.franchises.find(f => f.deviceId === deviceId);
             const contents = contentIds.map(id => {
                 const content = data.content.find(c => c.id === id);
@@ -78,17 +79,21 @@ const createRouter = (db) => {
         });
 
         return response.success(res, enrichedAssignments);
+        } catch (err) {
+            return response.error(res, 'Failed to load assignments', 500);
+        }
     });
 
     /**
      * GET /api/assignments/:deviceId
      * Get assignments for a specific device (ADMIN)
      */
-    router.get('/:deviceId', requireAdmin, (req, res) => {
+    router.get('/:deviceId', requireAdmin, async (req, res) => {
         const { deviceId } = req.params;
-        const data = db.load();
-        
-        const franchise = data.franchises.find(f => f.deviceId === deviceId);
+        try {
+            const data = await db.load();
+            
+            const franchise = data.franchises.find(f => f.deviceId === deviceId);
         
         if (!franchise) {
             return response.notFound(res, 'Franchise not found');
@@ -102,17 +107,20 @@ const createRouter = (db) => {
             franchise: { id: franchise.id, name: franchise.name, location: franchise.location },
             assignments: contents,
         });
+        } catch (err) {
+            return response.error(res, 'Failed to load assignments', 500);
+        }
     });
 
     /**
      * DELETE /api/assignments/:deviceId
      * Clear all assignments for a device (ADMIN)
      */
-    router.delete('/:deviceId', requireAdmin, (req, res, next) => {
+    router.delete('/:deviceId', requireAdmin, async (req, res, next) => {
         try {
             const { deviceId } = req.params;
 
-            db.transact((data) => {
+            await db.transact((data) => {
                 const franchise = data.franchises.find(f => f.deviceId === deviceId);
                 
                 if (!franchise) {
@@ -140,7 +148,7 @@ const createRouter = (db) => {
      * POST /api/assignments/:deviceId/add
      * Add content to existing assignments (ADMIN)
      */
-    router.post('/:deviceId/add', requireAdmin, (req, res, next) => {
+    router.post('/:deviceId/add', requireAdmin, async (req, res, next) => {
         try {
             const { deviceId } = req.params;
             const { contentIds } = req.body;
@@ -149,7 +157,7 @@ const createRouter = (db) => {
                 return response.badRequest(res, 'contentIds must be an array');
             }
 
-            const result = db.transact((data) => {
+            const result = await db.transact((data) => {
                 const franchise = data.franchises.find(f => f.deviceId === deviceId);
                 
                 if (!franchise) {
@@ -186,7 +194,7 @@ const createRouter = (db) => {
      * POST /api/assignments/:deviceId/remove
      * Remove content from assignments (ADMIN)
      */
-    router.post('/:deviceId/remove', requireAdmin, (req, res, next) => {
+    router.post('/:deviceId/remove', requireAdmin, async (req, res, next) => {
         try {
             const { deviceId } = req.params;
             const { contentIds } = req.body;
@@ -195,7 +203,7 @@ const createRouter = (db) => {
                 return response.badRequest(res, 'contentIds must be an array');
             }
 
-            const result = db.transact((data) => {
+            const result = await db.transact((data) => {
                 const franchise = data.franchises.find(f => f.deviceId === deviceId);
                 
                 if (!franchise) {

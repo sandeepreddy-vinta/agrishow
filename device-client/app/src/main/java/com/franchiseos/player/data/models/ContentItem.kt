@@ -28,5 +28,7 @@ data class ContentItem(
     val duration: Int = 10, // seconds
     
     @SerializedName("uploadDate")
-    val uploadDate: String
+    val uploadDate: String,
+    
+    var localPath: String? = null
 )

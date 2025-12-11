@@ -79,22 +79,27 @@ const requireAdmin = (req, res, next) => {
 /**
  * Device Authentication via Device Token
  */
-const requireDevice = (db) => (req, res, next) => {
+const requireDevice = (db) => async (req, res, next) => {
     const token = req.get('X-Device-Token');
     
     if (!token) {
         return response.unauthorized(res, 'Missing device token');
     }
 
-    const currentDb = db.load();
-    const franchise = currentDb.franchises.find(f => f.token === token);
+    try {
+        const currentDb = await db.load();
+        const franchise = currentDb.franchises.find(f => f.token === token);
 
-    if (!franchise) {
-        return response.unauthorized(res, 'Invalid device token');
+        if (!franchise) {
+            return response.unauthorized(res, 'Invalid device token');
+        }
+
+        req.franchise = franchise;
+        next();
+    } catch (err) {
+        console.error('[Auth] Device auth failed:', err);
+        return response.error(res, 'Authentication error', 500);
     }
-
-    req.franchise = franchise;
-    next();
 };
 
 /**
