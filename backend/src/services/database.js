@@ -80,14 +80,14 @@ class DatabaseManager {
 
     /**
      * Load data from Firestore (or cache)
-     * Returns a PROMISE now (breaking change for synchronous callers)
+     * @param {boolean} forceRefresh - Skip cache and fetch directly from Firestore
      */
-    async load() {
+    async load(forceRefresh = false) {
         // Ensure database is initialized
         await this.ensureInitialized();
         
-        // If we have fresh cache, use it
-        if (this.cache && (Date.now() - this.lastFetch < this.CACHE_TTL)) {
+        // If we have fresh cache and not forcing refresh, use it
+        if (!forceRefresh && this.cache && (Date.now() - this.lastFetch < this.CACHE_TTL)) {
             return JSON.parse(JSON.stringify(this.cache));
         }
 

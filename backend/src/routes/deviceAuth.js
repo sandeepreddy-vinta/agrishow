@@ -125,17 +125,18 @@ const createRouter = (db) => {
             const fullPhone = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
             console.log('[DeviceAuth] Looking up OTP for:', fullPhone);
 
-            // Verify OTP from database
+            // Verify OTP from database - FORCE REFRESH to bypass cache
             let currentData;
             try {
-                currentData = await db.load();
+                currentData = await db.load(true); // Force fresh read from Firestore
             } catch (loadErr) {
                 console.error('[DeviceAuth] Failed to load database:', loadErr.message);
                 return response.error(res, 'Database unavailable', 503);
             }
             
             const stored = currentData.otpTokens?.[fullPhone];
-            console.log('[DeviceAuth] Stored OTP data:', stored ? { otp: stored.otp, expiresAt: stored.expiresAt, attempts: stored.attempts } : 'NOT FOUND');
+            console.log('[DeviceAuth] Stored OTP data for', fullPhone, ':', stored ? { otp: stored.otp, expiresAt: stored.expiresAt, attempts: stored.attempts } : 'NOT FOUND');
+            console.log('[DeviceAuth] All OTP keys:', Object.keys(currentData.otpTokens || {}));
 
             if (!stored) {
                 return response.unauthorized(res, 'OTP expired or not found. Please request a new OTP.');
