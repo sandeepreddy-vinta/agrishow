@@ -1,22 +1,19 @@
 /**
- * MSG91 SMS Service with Custom OTP Management
+ * MSG91 SMS Service with Firestore OTP Storage
  * Uses SMS API (not OTP API) to support DLT templates with ##var1##
+ * Stores OTPs in Firestore for Cloud Run stateless compatibility
  */
 
 const axios = require('axios');
+const { Firestore } = require('@google-cloud/firestore');
 
 class MSG91Service {
     constructor() {
         this.authKey = process.env.MSG91_AUTH_KEY;
         this.templateId = process.env.MSG91_TEMPLATE_ID;
-        this.senderId = process.env.MSG91_SENDER_ID || 'AGRIML';
-        
-        // In-memory OTP storage with expiry (for Cloud Run stateless, consider Redis/Firestore for production)
-        this.otpStore = new Map();
+        this.firestore = new Firestore();
+        this.otpCollection = this.firestore.collection('otp_tokens');
         this.OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
-        
-        // Cleanup expired OTPs every 5 minutes
-        setInterval(() => this.cleanupExpiredOTPs(), 5 * 60 * 1000);
     }
 
     /**
@@ -27,26 +24,38 @@ class MSG91Service {
     }
 
     /**
-     * Store OTP with expiry
+     * Store OTP in Firestore
      */
-    storeOTP(phone, otp) {
-        this.otpStore.set(phone, {
+    async storeOTP(phone, otp) {
+        await this.otpCollection.doc(phone).set({
             otp,
             expiresAt: Date.now() + this.OTP_EXPIRY_MS,
             attempts: 0,
+            createdAt: new Date().toISOString(),
         });
     }
 
     /**
-     * Clean up expired OTPs
+     * Get OTP from Firestore
      */
-    cleanupExpiredOTPs() {
-        const now = Date.now();
-        for (const [phone, data] of this.otpStore.entries()) {
-            if (data.expiresAt < now) {
-                this.otpStore.delete(phone);
-            }
-        }
+    async getOTP(phone) {
+        const doc = await this.otpCollection.doc(phone).get();
+        if (!doc.exists) return null;
+        return doc.data();
+    }
+
+    /**
+     * Update OTP attempts in Firestore
+     */
+    async updateAttempts(phone, attempts) {
+        await this.otpCollection.doc(phone).update({ attempts });
+    }
+
+    /**
+     * Delete OTP from Firestore
+     */
+    async deleteOTP(phone) {
+        await this.otpCollection.doc(phone).delete();
     }
 
     /**
@@ -58,9 +67,11 @@ class MSG91Service {
         try {
             const cleanPhone = phone.replace(/[\s+\-]/g, '');
             
-            // Generate and store OTP
+            // Generate and store OTP in Firestore
             const otp = this.generateOTP();
-            this.storeOTP(cleanPhone, otp);
+            await this.storeOTP(cleanPhone, otp);
+            
+            console.log(`[MSG91] Generated OTP ${otp} for ${cleanPhone}`);
             
             // Use MSG91 Flow API to send SMS with template
             const response = await axios.post(
@@ -94,7 +105,7 @@ class MSG91Service {
             }
 
             // Remove stored OTP if send failed
-            this.otpStore.delete(cleanPhone);
+            await this.deleteOTP(cleanPhone);
             
             return {
                 success: false,
@@ -110,7 +121,7 @@ class MSG91Service {
     }
 
     /**
-     * Verify OTP against stored value
+     * Verify OTP against Firestore stored value
      * @param {string} phone - Phone number with country code
      * @param {string} otp - OTP entered by user
      * @returns {Promise<{success: boolean, message: string}>}
@@ -118,7 +129,9 @@ class MSG91Service {
     async verifyOTP(phone, otp) {
         try {
             const cleanPhone = phone.replace(/[\s+\-]/g, '');
-            const stored = this.otpStore.get(cleanPhone);
+            const stored = await this.getOTP(cleanPhone);
+
+            console.log(`[MSG91] Verifying OTP for ${cleanPhone}, stored:`, stored ? 'found' : 'not found');
 
             if (!stored) {
                 return {
@@ -129,7 +142,7 @@ class MSG91Service {
 
             // Check if expired
             if (Date.now() > stored.expiresAt) {
-                this.otpStore.delete(cleanPhone);
+                await this.deleteOTP(cleanPhone);
                 return {
                     success: false,
                     message: 'OTP has expired. Please request a new OTP.',
@@ -138,7 +151,7 @@ class MSG91Service {
 
             // Check attempts (max 3)
             if (stored.attempts >= 3) {
-                this.otpStore.delete(cleanPhone);
+                await this.deleteOTP(cleanPhone);
                 return {
                     success: false,
                     message: 'Too many failed attempts. Please request a new OTP.',
@@ -147,7 +160,7 @@ class MSG91Service {
 
             // Verify OTP
             if (stored.otp === otp) {
-                this.otpStore.delete(cleanPhone); // Clear after successful verification
+                await this.deleteOTP(cleanPhone); // Clear after successful verification
                 console.log(`[MSG91] OTP verified successfully for ${cleanPhone}`);
                 return {
                     success: true,
@@ -156,12 +169,13 @@ class MSG91Service {
             }
 
             // Increment attempts on failure
-            stored.attempts++;
-            console.log(`[MSG91] Invalid OTP attempt ${stored.attempts}/3 for ${cleanPhone}`);
+            const newAttempts = (stored.attempts || 0) + 1;
+            await this.updateAttempts(cleanPhone, newAttempts);
+            console.log(`[MSG91] Invalid OTP attempt ${newAttempts}/3 for ${cleanPhone}`);
             
             return {
                 success: false,
-                message: `Invalid OTP. ${3 - stored.attempts} attempts remaining.`,
+                message: `Invalid OTP. ${3 - newAttempts} attempts remaining.`,
             };
         } catch (error) {
             console.error('[MSG91] Verify OTP error:', error.message);
