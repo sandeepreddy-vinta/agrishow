@@ -13,6 +13,34 @@ const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 const createRouter = (db) => {
     const router = express.Router();
 
+    // Debug endpoint to check OTP storage
+    router.get('/debug-otp/:phone', async (req, res) => {
+        try {
+            const phone = req.params.phone.replace(/[\s+\-]/g, '');
+            const fullPhone = phone.startsWith('91') ? phone : `91${phone}`;
+            
+            console.log('[Debug] Checking OTP for:', fullPhone);
+            
+            const data = await db.load();
+            const stored = data.otpTokens?.[fullPhone];
+            
+            return res.json({
+                phone: fullPhone,
+                hasOtp: !!stored,
+                otpData: stored ? {
+                    otp: stored.otp,
+                    expiresAt: new Date(stored.expiresAt).toISOString(),
+                    expired: Date.now() > stored.expiresAt,
+                    attempts: stored.attempts
+                } : null,
+                allOtpPhones: Object.keys(data.otpTokens || {})
+            });
+        } catch (err) {
+            console.error('[Debug] Error:', err.message);
+            return res.status(500).json({ error: err.message });
+        }
+    });
+
     /**
      * POST /api/auth/device/send-otp
      * Send OTP to partner's phone number

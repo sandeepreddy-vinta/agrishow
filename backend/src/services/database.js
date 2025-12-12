@@ -53,7 +53,13 @@ class DatabaseManager {
     
     async ensureInitialized() {
         if (!this.initialized) {
-            await this.init();
+            console.log('[DB] ensureInitialized: not initialized, calling init()...');
+            try {
+                await this.init();
+            } catch (err) {
+                console.error('[DB] ensureInitialized failed:', err.message);
+                throw err;
+            }
         }
     }
 
