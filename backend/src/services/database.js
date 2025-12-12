@@ -10,28 +10,48 @@ const path = require('path');
 
 class DatabaseManager {
     constructor() {
+        const isProd = process.env.NODE_ENV === 'production';
         const bundledKeyPath = path.join(__dirname, '../../../service-account-key.json');
-        const envCredsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-        const envCredsMissing = envCredsPath && !fs.existsSync(envCredsPath);
 
-        if (( !envCredsPath || envCredsMissing ) && fs.existsSync(bundledKeyPath)) {
-            process.env.GOOGLE_APPLICATION_CREDENTIALS = bundledKeyPath;
-            console.log('[DB] GOOGLE_APPLICATION_CREDENTIALS set to bundled key:', bundledKeyPath);
-            if (envCredsMissing) {
-                console.log('[DB] Previous GOOGLE_APPLICATION_CREDENTIALS was missing:', envCredsPath);
+        if (isProd) {
+            // If these are manually set incorrectly in Cloud Run, google-auth will pick the wrong project
+            // and Firestore calls can fail with NOT_FOUND (database doesn't exist in that project).
+            if (process.env.GOOGLE_CLOUD_PROJECT) {
+                console.log('[DB] Ignoring GOOGLE_CLOUD_PROJECT override in production');
+                delete process.env.GOOGLE_CLOUD_PROJECT;
+            }
+            if (process.env.GCLOUD_PROJECT) {
+                console.log('[DB] Ignoring GCLOUD_PROJECT override in production');
+                delete process.env.GCLOUD_PROJECT;
             }
         }
 
         let projectId = process.env.FIRESTORE_PROJECT_ID;
-        if (!projectId && process.env.GOOGLE_APPLICATION_CREDENTIALS && fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
-            try {
-                const raw = fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8');
-                const parsed = JSON.parse(raw);
-                if (parsed && parsed.project_id) {
-                    projectId = parsed.project_id;
+
+        // In production (Cloud Run), rely on Application Default Credentials (service account attached to Cloud Run)
+        // and do NOT override GOOGLE_APPLICATION_CREDENTIALS from a bundled JSON file.
+        if (!isProd) {
+            const envCredsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+            const envCredsMissing = envCredsPath && !fs.existsSync(envCredsPath);
+
+            if ((!envCredsPath || envCredsMissing) && fs.existsSync(bundledKeyPath)) {
+                process.env.GOOGLE_APPLICATION_CREDENTIALS = bundledKeyPath;
+                console.log('[DB] GOOGLE_APPLICATION_CREDENTIALS set to bundled key:', bundledKeyPath);
+                if (envCredsMissing) {
+                    console.log('[DB] Previous GOOGLE_APPLICATION_CREDENTIALS was missing:', envCredsPath);
                 }
-            } catch (e) {
-                // ignore
+            }
+
+            if (!projectId && process.env.GOOGLE_APPLICATION_CREDENTIALS && fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+                try {
+                    const raw = fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8');
+                    const parsed = JSON.parse(raw);
+                    if (parsed && parsed.project_id) {
+                        projectId = parsed.project_id;
+                    }
+                } catch (e) {
+                    // ignore
+                }
             }
         }
 
@@ -41,12 +61,14 @@ class DatabaseManager {
         }
 
         this.firestore = Object.keys(firestoreOptions).length ? new Firestore(firestoreOptions) : new Firestore();
+        this.projectIdResolved = projectId || null;
 
         console.log('[DB] Firestore init env:', {
+            NODE_ENV: process.env.NODE_ENV,
             FIRESTORE_PROJECT_ID: process.env.FIRESTORE_PROJECT_ID,
             GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
             GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-            resolvedProjectId: projectId,
+            resolvedProjectId: this.projectIdResolved,
         });
         this.collectionName = 'system';
         this.docId = 'main';
