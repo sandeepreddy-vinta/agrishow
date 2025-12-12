@@ -12,6 +12,7 @@ class DatabaseManager {
     constructor() {
         const isProd = process.env.NODE_ENV === 'production';
         const bundledKeyPath = path.join(__dirname, '../../../service-account-key.json');
+        const databaseId = process.env.FIRESTORE_DATABASE_ID || '(default)';
 
         if (isProd) {
             // If these are manually set incorrectly in Cloud Run, google-auth will pick the wrong project
@@ -59,6 +60,9 @@ class DatabaseManager {
         if (projectId) {
             firestoreOptions.projectId = projectId;
         }
+        if (databaseId) {
+            firestoreOptions.databaseId = databaseId;
+        }
 
         this.firestore = Object.keys(firestoreOptions).length ? new Firestore(firestoreOptions) : new Firestore();
         this.projectIdResolved = projectId || null;
@@ -66,9 +70,11 @@ class DatabaseManager {
         console.log('[DB] Firestore init env:', {
             NODE_ENV: process.env.NODE_ENV,
             FIRESTORE_PROJECT_ID: process.env.FIRESTORE_PROJECT_ID,
+            FIRESTORE_DATABASE_ID: process.env.FIRESTORE_DATABASE_ID,
             GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
             GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
             resolvedProjectId: this.projectIdResolved,
+            resolvedDatabaseId: databaseId,
         });
         this.collectionName = 'system';
         this.docId = 'main';
