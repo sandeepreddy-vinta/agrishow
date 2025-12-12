@@ -88,6 +88,7 @@ const createRouter = (db) => {
     router.post('/verify-otp', async (req, res, next) => {
         try {
             const { phone, otp, deviceName, location } = req.body;
+            console.log('[DeviceAuth] Verify OTP request:', { phone, otp: otp ? '****' : 'missing' });
 
             if (!phone || !otp) {
                 return response.badRequest(res, 'Phone and OTP are required');
@@ -95,109 +96,141 @@ const createRouter = (db) => {
 
             const cleanPhone = phone.replace(/[\s+\-]/g, '');
             const fullPhone = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
+            console.log('[DeviceAuth] Looking up OTP for:', fullPhone);
 
             // Verify OTP from database
-            const currentData = await db.load();
+            let currentData;
+            try {
+                currentData = await db.load();
+            } catch (loadErr) {
+                console.error('[DeviceAuth] Failed to load database:', loadErr.message);
+                return response.error(res, 'Database unavailable', 503);
+            }
+            
             const stored = currentData.otpTokens?.[fullPhone];
+            console.log('[DeviceAuth] Stored OTP data:', stored ? { otp: stored.otp, expiresAt: stored.expiresAt, attempts: stored.attempts } : 'NOT FOUND');
 
             if (!stored) {
                 return response.unauthorized(res, 'OTP expired or not found. Please request a new OTP.');
             }
 
             if (Date.now() > stored.expiresAt) {
-                // Clean up expired OTP
-                await db.transact((data) => {
-                    if (data.otpTokens) delete data.otpTokens[fullPhone];
-                    return { data: null };
-                });
+                console.log('[DeviceAuth] OTP expired');
+                try {
+                    await db.transact((data) => {
+                        if (data.otpTokens) delete data.otpTokens[fullPhone];
+                        return { data: { deleted: true } };
+                    });
+                } catch (e) { console.error('[DeviceAuth] Failed to delete expired OTP:', e.message); }
                 return response.unauthorized(res, 'OTP has expired. Please request a new OTP.');
             }
 
             if (stored.attempts >= 3) {
-                await db.transact((data) => {
-                    if (data.otpTokens) delete data.otpTokens[fullPhone];
-                    return { data: null };
-                });
+                console.log('[DeviceAuth] Too many attempts');
+                try {
+                    await db.transact((data) => {
+                        if (data.otpTokens) delete data.otpTokens[fullPhone];
+                        return { data: { deleted: true } };
+                    });
+                } catch (e) { console.error('[DeviceAuth] Failed to delete OTP after max attempts:', e.message); }
                 return response.unauthorized(res, 'Too many failed attempts. Please request a new OTP.');
             }
 
+            console.log('[DeviceAuth] Comparing OTPs:', { entered: otp, stored: stored.otp, match: stored.otp === otp });
+            
             if (stored.otp !== otp) {
                 // Increment attempts
-                await db.transact((data) => {
-                    if (data.otpTokens?.[fullPhone]) {
-                        data.otpTokens[fullPhone].attempts = (data.otpTokens[fullPhone].attempts || 0) + 1;
-                    }
-                    return { data: null };
-                });
+                try {
+                    await db.transact((data) => {
+                        if (data.otpTokens?.[fullPhone]) {
+                            data.otpTokens[fullPhone].attempts = (data.otpTokens[fullPhone].attempts || 0) + 1;
+                        }
+                        return { data: { updated: true } };
+                    });
+                } catch (e) { console.error('[DeviceAuth] Failed to update attempts:', e.message); }
                 const remaining = 3 - (stored.attempts + 1);
                 return response.unauthorized(res, `Invalid OTP. ${remaining} attempts remaining.`);
             }
 
+            console.log('[DeviceAuth] OTP verified successfully, creating/updating partner...');
+
             // OTP verified - delete it and proceed with registration/login
-            const result = await db.transact((data) => {
-                // Delete used OTP
-                if (data.otpTokens) delete data.otpTokens[fullPhone];
-                let partner = data.franchises.find(f => f.phone === fullPhone);
-
-                if (partner) {
-                    const idx = data.franchises.findIndex(f => f.id === partner.id);
-                    data.franchises[idx].lastLogin = new Date().toISOString();
-                    data.franchises[idx].status = 'online';
+            let partnerData;
+            try {
+                partnerData = await db.transact((data) => {
+                    // Delete used OTP
+                    if (data.otpTokens) delete data.otpTokens[fullPhone];
                     
-                    if (deviceName) data.franchises[idx].name = deviceName;
-                    if (location) data.franchises[idx].location = location;
+                    let partner = data.franchises.find(f => f.phone === fullPhone);
 
-                    return {
-                        data: {
-                            isNewPartner: false,
-                            partner: data.franchises[idx],
-                        },
-                        audit: { action: 'DEVICE_LOGIN', details: { phone: fullPhone } },
-                    };
-                } else {
-                    const deviceId = `DEV-${Date.now().toString(36).toUpperCase()}`;
-                    const deviceToken = crypto.randomUUID();
+                    if (partner) {
+                        const idx = data.franchises.findIndex(f => f.id === partner.id);
+                        data.franchises[idx].lastLogin = new Date().toISOString();
+                        data.franchises[idx].status = 'online';
+                        
+                        if (deviceName) data.franchises[idx].name = deviceName;
+                        if (location) data.franchises[idx].location = location;
 
-                    const newPartner = {
-                        id: crypto.randomUUID(),
-                        phone: fullPhone,
-                        name: deviceName || `Partner ${fullPhone.slice(-4)}`,
-                        location: location || 'Not specified',
-                        deviceId,
-                        token: deviceToken,
-                        status: 'online',
-                        lastSync: new Date().toISOString(),
-                        lastLogin: new Date().toISOString(),
-                        createdAt: new Date().toISOString(),
-                        authMethod: 'phone_otp',
-                    };
+                        return {
+                            data: {
+                                isNewPartner: false,
+                                partner: { ...data.franchises[idx] },
+                            },
+                            audit: { action: 'DEVICE_LOGIN', details: { phone: fullPhone } },
+                        };
+                    } else {
+                        const deviceId = `DEV-${Date.now().toString(36).toUpperCase()}`;
+                        const deviceToken = crypto.randomUUID();
 
-                    data.franchises.push(newPartner);
+                        const newPartner = {
+                            id: crypto.randomUUID(),
+                            phone: fullPhone,
+                            name: deviceName || `Partner ${fullPhone.slice(-4)}`,
+                            location: location || 'Not specified',
+                            deviceId,
+                            token: deviceToken,
+                            status: 'online',
+                            lastSync: new Date().toISOString(),
+                            lastLogin: new Date().toISOString(),
+                            createdAt: new Date().toISOString(),
+                            authMethod: 'phone_otp',
+                        };
 
-                    return {
-                        data: {
-                            isNewPartner: true,
-                            partner: newPartner,
-                        },
-                        audit: { action: 'DEVICE_REGISTER', details: { phone: fullPhone, deviceId } },
-                    };
-                }
-            });
+                        data.franchises.push(newPartner);
 
-            console.log(`[DeviceAuth] ${result.isNewPartner ? 'New partner registered' : 'Partner logged in'}: ${fullPhone}`);
+                        return {
+                            data: {
+                                isNewPartner: true,
+                                partner: { ...newPartner },
+                            },
+                            audit: { action: 'DEVICE_REGISTER', details: { phone: fullPhone, deviceId } },
+                        };
+                    }
+                });
+            } catch (txErr) {
+                console.error('[DeviceAuth] Transaction failed:', txErr.message);
+                return response.error(res, 'Failed to complete registration', 500);
+            }
+
+            if (!partnerData || !partnerData.partner) {
+                console.error('[DeviceAuth] No partner data returned from transaction');
+                return response.error(res, 'Registration failed', 500);
+            }
+
+            console.log(`[DeviceAuth] ${partnerData.isNewPartner ? 'New partner registered' : 'Partner logged in'}: ${fullPhone}`);
 
             return response.success(res, {
-                deviceToken: result.partner.token,
-                deviceId: result.partner.deviceId,
-                partnerId: result.partner.id,
-                partnerName: result.partner.name,
-                location: result.partner.location,
-                isNewPartner: result.isNewPartner,
-            }, result.isNewPartner ? 'Registration successful' : 'Login successful');
+                deviceToken: partnerData.partner.token,
+                deviceId: partnerData.partner.deviceId,
+                partnerId: partnerData.partner.id,
+                partnerName: partnerData.partner.name,
+                location: partnerData.partner.location,
+                isNewPartner: partnerData.isNewPartner,
+            }, partnerData.isNewPartner ? 'Registration successful' : 'Login successful');
 
         } catch (err) {
-            console.error('[DeviceAuth] Verify OTP error:', err);
-            next(err);
+            console.error('[DeviceAuth] Verify OTP error:', err.message, err.stack);
+            return response.error(res, 'Verification failed: ' + err.message, 500);
         }
     });
 
