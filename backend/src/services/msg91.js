@@ -21,6 +21,9 @@ class MSG91Service {
         try {
             const cleanPhone = phone.replace(/[\s+\-]/g, '');
             
+            // Generate 4-digit OTP manually since template uses ##var1##
+            const otp = Math.floor(1000 + Math.random() * 9000).toString();
+            
             const response = await axios.post(
                 `${this.baseUrl}/otp`,
                 null,
@@ -29,8 +32,9 @@ class MSG91Service {
                         template_id: this.templateId,
                         mobile: cleanPhone,
                         authkey: this.authKey,
-                        otp_length: 4,
-                        otp_expiry: 10, // 10 minutes
+                        otp: otp,           // Set the OTP value explicitly
+                        var1: otp,          // Map ##var1## to the OTP value
+                        otp_expiry: 10,     // 10 minutes
                     },
                     headers: {
                         'Content-Type': 'application/json',
