@@ -24,10 +24,14 @@ class DatabaseManager {
     }
 
     async init() {
+        if (this.initialized) return this;
         if (this.initPromise) return this.initPromise;
+        
+        console.log('[DB] Starting initialization...');
         
         this.initPromise = (async () => {
             try {
+                console.log('[DB] Fetching document from Firestore...');
                 const doc = await this.docRef.get();
                 if (!doc.exists) {
                     console.log('[DB] No database found in Firestore. Initializing new database...');
@@ -40,9 +44,10 @@ class DatabaseManager {
                 }
                 this.lastFetch = Date.now();
                 this.initialized = true;
+                console.log('[DB] Initialization complete. Franchises:', this.cache?.franchises?.length || 0);
                 return this;
             } catch (err) {
-                console.error('[DB] Failed to connect to Firestore:', err);
+                console.error('[DB] Failed to connect to Firestore:', err.message);
                 this.initPromise = null; // Allow retry
                 throw err;
             }
