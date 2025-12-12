@@ -1,6 +1,6 @@
 /**
- * MSG91 OTP Service
- * Handles sending and verifying OTP via MSG91 API
+ * MSG91 SMS Service with Custom OTP Management
+ * Uses SMS API (not OTP API) to support DLT templates with ##var1##
  */
 
 const axios = require('axios');
@@ -9,42 +9,83 @@ class MSG91Service {
     constructor() {
         this.authKey = process.env.MSG91_AUTH_KEY;
         this.templateId = process.env.MSG91_TEMPLATE_ID;
-        this.baseUrl = 'https://control.msg91.com/api/v5';
+        this.senderId = process.env.MSG91_SENDER_ID || 'AGRIML';
+        
+        // In-memory OTP storage with expiry (for Cloud Run stateless, consider Redis/Firestore for production)
+        this.otpStore = new Map();
+        this.OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+        
+        // Cleanup expired OTPs every 5 minutes
+        setInterval(() => this.cleanupExpiredOTPs(), 5 * 60 * 1000);
     }
 
     /**
-     * Send OTP to a phone number
+     * Generate a 4-digit OTP
+     */
+    generateOTP() {
+        return Math.floor(1000 + Math.random() * 9000).toString();
+    }
+
+    /**
+     * Store OTP with expiry
+     */
+    storeOTP(phone, otp) {
+        this.otpStore.set(phone, {
+            otp,
+            expiresAt: Date.now() + this.OTP_EXPIRY_MS,
+            attempts: 0,
+        });
+    }
+
+    /**
+     * Clean up expired OTPs
+     */
+    cleanupExpiredOTPs() {
+        const now = Date.now();
+        for (const [phone, data] of this.otpStore.entries()) {
+            if (data.expiresAt < now) {
+                this.otpStore.delete(phone);
+            }
+        }
+    }
+
+    /**
+     * Send OTP to a phone number using SMS API
      * @param {string} phone - Phone number with country code (e.g., 919876543210)
-     * @returns {Promise<{success: boolean, message: string, requestId?: string}>}
+     * @returns {Promise<{success: boolean, message: string}>}
      */
     async sendOTP(phone) {
         try {
             const cleanPhone = phone.replace(/[\s+\-]/g, '');
             
-            // Generate 4-digit OTP manually since template uses ##var1##
-            const otp = Math.floor(1000 + Math.random() * 9000).toString();
+            // Generate and store OTP
+            const otp = this.generateOTP();
+            this.storeOTP(cleanPhone, otp);
             
+            // Use MSG91 Flow API to send SMS with template
             const response = await axios.post(
-                `${this.baseUrl}/otp`,
-                null,
+                'https://control.msg91.com/api/v5/flow/',
                 {
-                    params: {
-                        template_id: this.templateId,
-                        mobile: cleanPhone,
-                        authkey: this.authKey,
-                        otp: otp,           // Set the OTP value explicitly
-                        var1: otp,          // Map ##var1## to the OTP value
-                        otp_expiry: 10,     // 10 minutes
-                    },
+                    template_id: this.templateId,
+                    short_url: '0',
+                    recipients: [
+                        {
+                            mobiles: cleanPhone,
+                            var1: otp,  // Maps to ##var1## in your DLT template
+                        }
+                    ]
+                },
+                {
                     headers: {
+                        'authkey': this.authKey,
                         'Content-Type': 'application/json',
                     },
                 }
             );
 
-            console.log('[MSG91] Send OTP response:', response.data);
+            console.log('[MSG91] Send SMS response:', response.data);
 
-            if (response.data.type === 'success') {
+            if (response.data.type === 'success' || response.data.message === 'success') {
                 return {
                     success: true,
                     message: 'OTP sent successfully',
@@ -52,12 +93,15 @@ class MSG91Service {
                 };
             }
 
+            // Remove stored OTP if send failed
+            this.otpStore.delete(cleanPhone);
+            
             return {
                 success: false,
                 message: response.data.message || 'Failed to send OTP',
             };
         } catch (error) {
-            console.error('[MSG91] Send OTP error:', error.response?.data || error.message);
+            console.error('[MSG91] Send SMS error:', error.response?.data || error.message);
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to send OTP',
@@ -66,7 +110,7 @@ class MSG91Service {
     }
 
     /**
-     * Verify OTP
+     * Verify OTP against stored value
      * @param {string} phone - Phone number with country code
      * @param {string} otp - OTP entered by user
      * @returns {Promise<{success: boolean, message: string}>}
@@ -74,82 +118,68 @@ class MSG91Service {
     async verifyOTP(phone, otp) {
         try {
             const cleanPhone = phone.replace(/[\s+\-]/g, '');
+            const stored = this.otpStore.get(cleanPhone);
 
-            const response = await axios.get(
-                `${this.baseUrl}/otp/verify`,
-                {
-                    params: {
-                        mobile: cleanPhone,
-                        otp: otp,
-                        authkey: this.authKey,
-                    },
-                }
-            );
+            if (!stored) {
+                return {
+                    success: false,
+                    message: 'OTP expired or not found. Please request a new OTP.',
+                };
+            }
 
-            console.log('[MSG91] Verify OTP response:', response.data);
+            // Check if expired
+            if (Date.now() > stored.expiresAt) {
+                this.otpStore.delete(cleanPhone);
+                return {
+                    success: false,
+                    message: 'OTP has expired. Please request a new OTP.',
+                };
+            }
 
-            if (response.data.type === 'success') {
+            // Check attempts (max 3)
+            if (stored.attempts >= 3) {
+                this.otpStore.delete(cleanPhone);
+                return {
+                    success: false,
+                    message: 'Too many failed attempts. Please request a new OTP.',
+                };
+            }
+
+            // Verify OTP
+            if (stored.otp === otp) {
+                this.otpStore.delete(cleanPhone); // Clear after successful verification
+                console.log(`[MSG91] OTP verified successfully for ${cleanPhone}`);
                 return {
                     success: true,
                     message: 'OTP verified successfully',
                 };
             }
 
+            // Increment attempts on failure
+            stored.attempts++;
+            console.log(`[MSG91] Invalid OTP attempt ${stored.attempts}/3 for ${cleanPhone}`);
+            
             return {
                 success: false,
-                message: response.data.message || 'Invalid OTP',
+                message: `Invalid OTP. ${3 - stored.attempts} attempts remaining.`,
             };
         } catch (error) {
-            console.error('[MSG91] Verify OTP error:', error.response?.data || error.message);
-            const errorMessage = error.response?.data?.message || 'OTP verification failed';
+            console.error('[MSG91] Verify OTP error:', error.message);
             return {
                 success: false,
-                message: errorMessage,
+                message: 'OTP verification failed',
             };
         }
     }
 
     /**
-     * Resend OTP
+     * Resend OTP - generates new OTP and sends again
      * @param {string} phone - Phone number with country code
-     * @param {string} retryType - 'text' or 'voice'
      * @returns {Promise<{success: boolean, message: string}>}
      */
-    async resendOTP(phone, retryType = 'text') {
-        try {
-            const cleanPhone = phone.replace(/[\s+\-]/g, '');
-
-            const response = await axios.get(
-                `${this.baseUrl}/otp/retry`,
-                {
-                    params: {
-                        mobile: cleanPhone,
-                        authkey: this.authKey,
-                        retrytype: retryType,
-                    },
-                }
-            );
-
-            console.log('[MSG91] Resend OTP response:', response.data);
-
-            if (response.data.type === 'success') {
-                return {
-                    success: true,
-                    message: 'OTP resent successfully',
-                };
-            }
-
-            return {
-                success: false,
-                message: response.data.message || 'Failed to resend OTP',
-            };
-        } catch (error) {
-            console.error('[MSG91] Resend OTP error:', error.response?.data || error.message);
-            return {
-                success: false,
-                message: error.response?.data?.message || 'Failed to resend OTP',
-            };
-        }
+    async resendOTP(phone) {
+        // Simply send a new OTP
+        return this.sendOTP(phone);
     }
 }
 
