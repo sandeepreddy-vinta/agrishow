@@ -19,25 +19,41 @@ class DatabaseManager {
         this.cache = null;
         this.lastFetch = 0;
         this.CACHE_TTL = 5000; // 5 seconds cache
+        this.initialized = false;
+        this.initPromise = null;
     }
 
     async init() {
-        try {
-            const doc = await this.docRef.get();
-            if (!doc.exists) {
-                console.log('[DB] No database found in Firestore. Initializing new database...');
-                const emptyDb = this.getEmptyDatabase();
-                await this.docRef.set(emptyDb);
-                this.cache = emptyDb;
-            } else {
-                console.log('[DB] Connected to Firestore. Database loaded.');
-                this.cache = doc.data();
+        if (this.initPromise) return this.initPromise;
+        
+        this.initPromise = (async () => {
+            try {
+                const doc = await this.docRef.get();
+                if (!doc.exists) {
+                    console.log('[DB] No database found in Firestore. Initializing new database...');
+                    const emptyDb = this.getEmptyDatabase();
+                    await this.docRef.set(emptyDb);
+                    this.cache = emptyDb;
+                } else {
+                    console.log('[DB] Connected to Firestore. Database loaded.');
+                    this.cache = doc.data();
+                }
+                this.lastFetch = Date.now();
+                this.initialized = true;
+                return this;
+            } catch (err) {
+                console.error('[DB] Failed to connect to Firestore:', err);
+                this.initPromise = null; // Allow retry
+                throw err;
             }
-            this.lastFetch = Date.now();
-            return this;
-        } catch (err) {
-            console.error('[DB] Failed to connect to Firestore:', err);
-            throw err;
+        })();
+        
+        return this.initPromise;
+    }
+    
+    async ensureInitialized() {
+        if (!this.initialized) {
+            await this.init();
         }
     }
 
@@ -56,6 +72,9 @@ class DatabaseManager {
      * Returns a PROMISE now (breaking change for synchronous callers)
      */
     async load() {
+        // Ensure database is initialized
+        await this.ensureInitialized();
+        
         // If we have fresh cache, use it
         if (this.cache && (Date.now() - this.lastFetch < this.CACHE_TTL)) {
             return JSON.parse(JSON.stringify(this.cache));
@@ -82,6 +101,9 @@ class DatabaseManager {
      * result can be { data: returnedValue, audit: { action, details } }
      */
     async transact(callback) {
+        // Ensure database is initialized before transacting
+        await this.ensureInitialized();
+        
         try {
             let result;
             let auditEntry;
