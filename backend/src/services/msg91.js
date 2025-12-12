@@ -29,6 +29,8 @@ class MSG91Service {
                         template_id: this.templateId,
                         mobile: cleanPhone,
                         authkey: this.authKey,
+                        otp_length: 4,
+                        otp_expiry: 10, // 10 minutes
                     },
                     headers: {
                         'Content-Type': 'application/json',

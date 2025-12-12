@@ -116,8 +116,8 @@ class SetupActivity : AppCompatActivity() {
     private fun verifyOtp() {
         val otp = etOtp.text.toString().trim()
         
-        if (otp.length < 4) {
-            showError("Please enter a valid OTP")
+        if (otp.length != 4) {
+            showError("Please enter a valid 4-digit OTP")
             return
         }
         
