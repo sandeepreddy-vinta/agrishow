@@ -11,9 +11,15 @@ const path = require('path');
 class DatabaseManager {
     constructor() {
         const bundledKeyPath = path.join(__dirname, '../../../service-account-key.json');
-        if (!process.env.GOOGLE_APPLICATION_CREDENTIALS && fs.existsSync(bundledKeyPath)) {
+        const envCredsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+        const envCredsMissing = envCredsPath && !fs.existsSync(envCredsPath);
+
+        if (( !envCredsPath || envCredsMissing ) && fs.existsSync(bundledKeyPath)) {
             process.env.GOOGLE_APPLICATION_CREDENTIALS = bundledKeyPath;
             console.log('[DB] GOOGLE_APPLICATION_CREDENTIALS set to bundled key:', bundledKeyPath);
+            if (envCredsMissing) {
+                console.log('[DB] Previous GOOGLE_APPLICATION_CREDENTIALS was missing:', envCredsPath);
+            }
         }
 
         let projectId = process.env.FIRESTORE_PROJECT_ID;
