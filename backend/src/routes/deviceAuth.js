@@ -20,6 +20,7 @@ const createRouter = (db) => {
     router.post('/send-otp', async (req, res, next) => {
         try {
             const { phone } = req.body;
+            console.log('[DeviceAuth] Send OTP request received for:', phone);
 
             if (!phone) {
                 return response.badRequest(res, 'Phone number is required');
@@ -33,30 +34,40 @@ const createRouter = (db) => {
             }
 
             const fullPhone = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
+            console.log('[DeviceAuth] Normalized phone:', fullPhone);
 
             // Generate OTP
             const otp = msg91.generateOTP();
+            console.log('[DeviceAuth] Generated OTP:', otp);
             
             // Store OTP in database
-            await db.transact((data) => {
-                if (!data.otpTokens) data.otpTokens = {};
-                data.otpTokens[fullPhone] = {
-                    otp,
-                    expiresAt: Date.now() + OTP_EXPIRY_MS,
-                    attempts: 0,
-                    createdAt: new Date().toISOString(),
-                };
-                return { data: null };
-            });
+            try {
+                await db.transact((data) => {
+                    if (!data.otpTokens) data.otpTokens = {};
+                    data.otpTokens[fullPhone] = {
+                        otp,
+                        expiresAt: Date.now() + OTP_EXPIRY_MS,
+                        attempts: 0,
+                        createdAt: new Date().toISOString(),
+                    };
+                    return { data: null };
+                });
+                console.log('[DeviceAuth] OTP stored in database');
+            } catch (dbErr) {
+                console.error('[DeviceAuth] Database error:', dbErr);
+                return response.error(res, 'Database error storing OTP', 500);
+            }
 
             // Send SMS
+            console.log('[DeviceAuth] Calling MSG91 sendSMS...');
             const result = await msg91.sendSMS(fullPhone, otp);
+            console.log('[DeviceAuth] MSG91 result:', JSON.stringify(result));
 
             if (!result.success) {
                 return response.error(res, result.message, 400);
             }
 
-            console.log(`[DeviceAuth] OTP sent to ${fullPhone}`);
+            console.log(`[DeviceAuth] OTP sent successfully to ${fullPhone}`);
 
             return response.success(res, {
                 phone: fullPhone,
@@ -64,8 +75,8 @@ const createRouter = (db) => {
             }, 'OTP sent to your phone');
 
         } catch (err) {
-            console.error('[DeviceAuth] Send OTP error:', err);
-            next(err);
+            console.error('[DeviceAuth] Send OTP error:', err.message, err.stack);
+            return response.error(res, `Server error: ${err.message}`, 500);
         }
     });
 

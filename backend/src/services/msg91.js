@@ -31,26 +31,32 @@ class MSG91Service {
             const cleanPhone = phone.replace(/[\s+\-]/g, '');
             
             console.log(`[MSG91] Sending OTP ${otp} to ${cleanPhone}`);
+            console.log(`[MSG91] Using template: ${this.templateId}`);
             
-            const response = await axios.post(
-                'https://control.msg91.com/api/v5/flow/',
-                {
-                    template_id: this.templateId,
-                    short_url: '0',
-                    recipients: [
-                        {
-                            mobiles: cleanPhone,
-                            var1: otp,
-                        }
-                    ]
+            const payload = {
+                template_id: this.templateId,
+                short_url: '0',
+                recipients: [
+                    {
+                        mobiles: cleanPhone,
+                        var1: otp,
+                    }
+                ]
+            };
+            
+            console.log('[MSG91] Request payload:', JSON.stringify(payload));
+            
+            const response = await axios({
+                method: 'POST',
+                url: 'https://api.msg91.com/api/v5/flow/',
+                data: payload,
+                headers: {
+                    'authkey': this.authKey,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                 },
-                {
-                    headers: {
-                        'authkey': this.authKey,
-                        'Content-Type': 'application/json',
-                    },
-                }
-            );
+                timeout: 30000,
+            });
 
             console.log('[MSG91] Send SMS response:', response.data);
 
@@ -68,9 +74,10 @@ class MSG91Service {
             };
         } catch (error) {
             console.error('[MSG91] Send SMS error:', error.response?.data || error.message);
+            console.error('[MSG91] Full error:', error.code, error.message);
             return {
                 success: false,
-                message: error.response?.data?.message || 'Failed to send OTP',
+                message: error.response?.data?.message || error.message || 'Failed to send OTP',
             };
         }
     }
