@@ -76,8 +76,12 @@ const createRouter = (db) => {
                 });
                 console.log('[DeviceAuth] OTP stored in Firestore:', fullPhone, '=', otp);
             } catch (dbErr) {
-                console.error('[DeviceAuth] Database error:', dbErr.message);
-                return response.error(res, 'Failed to initialize OTP. Please try again.', 500);
+                console.error('[DeviceAuth] Database error storing OTP:', dbErr);
+                return response.error(res, 'Failed to initialize OTP. Please try again.', 500, {
+                    code: dbErr.code,
+                    message: dbErr.message,
+                    details: dbErr.details,
+                });
             }
 
             // Send SMS
@@ -115,6 +119,8 @@ const createRouter = (db) => {
                 return response.badRequest(res, 'Phone and OTP are required');
             }
 
+            const cleanOtp = String(otp).trim();
+
             const cleanPhone = phone.replace(/[\s+\-]/g, '');
             const fullPhone = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
             console.log('[DeviceAuth] Looking up OTP for:', fullPhone);
@@ -146,9 +152,9 @@ const createRouter = (db) => {
                 return response.unauthorized(res, 'Too many failed attempts. Please request a new OTP.');
             }
 
-            console.log('[DeviceAuth] Comparing OTPs:', { entered: otp, stored: stored.otp, match: stored.otp === otp });
+            console.log('[DeviceAuth] Comparing OTPs:', { entered: cleanOtp, stored: stored.otp, match: String(stored.otp) === cleanOtp });
             
-            if (stored.otp !== otp) {
+            if (String(stored.otp) !== cleanOtp) {
                 // Increment attempts
                 try { await db.updateOTPAttempts(fullPhone, (stored.attempts || 0) + 1); } catch (e) { }
                 const remaining = 3 - (stored.attempts + 1);

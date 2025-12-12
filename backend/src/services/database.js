@@ -8,9 +8,18 @@ const { Firestore } = require('@google-cloud/firestore');
 
 class DatabaseManager {
     constructor() {
-        // Explicitly set project ID to ensure correct Firestore database is used
-        this.firestore = new Firestore({
-            projectId: process.env.GOOGLE_CLOUD_PROJECT || 'crop-analysis-475317'
+        const firestoreOptions = {};
+        if (process.env.FIRESTORE_PROJECT_ID) {
+            firestoreOptions.projectId = process.env.FIRESTORE_PROJECT_ID;
+        }
+
+        this.firestore = Object.keys(firestoreOptions).length
+            ? new Firestore(firestoreOptions)
+            : new Firestore();
+
+        console.log('[DB] Firestore init env:', {
+            FIRESTORE_PROJECT_ID: process.env.FIRESTORE_PROJECT_ID,
+            GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
         });
         this.collectionName = 'system';
         this.docId = 'main';
