@@ -13,6 +13,9 @@ class DatabaseManager {
         this.docId = 'main';
         this.docRef = this.firestore.collection(this.collectionName).doc(this.docId);
         
+        // Separate collection for OTP tokens (more reliable for Cloud Run)
+        this.otpCollection = this.firestore.collection('otp_tokens');
+        
         // In-memory cache for fast reads (optional, but helpful for read-heavy/write-rare)
         // However, for stateless Cloud Run, we should fetch fresh data often or rely on Firestore's consistency.
         // To minimize reads, we can cache, but we must invalidate on write.
@@ -21,6 +24,36 @@ class DatabaseManager {
         this.CACHE_TTL = 5000; // 5 seconds cache
         this.initialized = false;
         this.initPromise = null;
+    }
+    
+    // OTP-specific methods using separate collection
+    async storeOTP(phone, otpData) {
+        console.log('[DB] Storing OTP for:', phone);
+        await this.otpCollection.doc(phone).set({
+            ...otpData,
+            createdAt: new Date().toISOString()
+        });
+        console.log('[DB] OTP stored successfully');
+    }
+    
+    async getOTP(phone) {
+        console.log('[DB] Getting OTP for:', phone);
+        const doc = await this.otpCollection.doc(phone).get();
+        if (!doc.exists) {
+            console.log('[DB] OTP not found for:', phone);
+            return null;
+        }
+        console.log('[DB] OTP found for:', phone);
+        return doc.data();
+    }
+    
+    async updateOTPAttempts(phone, attempts) {
+        await this.otpCollection.doc(phone).update({ attempts });
+    }
+    
+    async deleteOTP(phone) {
+        console.log('[DB] Deleting OTP for:', phone);
+        await this.otpCollection.doc(phone).delete();
     }
 
     async init() {

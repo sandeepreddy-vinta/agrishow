@@ -21,8 +21,8 @@ const createRouter = (db) => {
             
             console.log('[Debug] Checking OTP for:', fullPhone);
             
-            const data = await db.load();
-            const stored = data.otpTokens?.[fullPhone];
+            // Use direct OTP collection method
+            const stored = await db.getOTP(fullPhone);
             
             return res.json({
                 phone: fullPhone,
@@ -32,8 +32,7 @@ const createRouter = (db) => {
                     expiresAt: new Date(stored.expiresAt).toISOString(),
                     expired: Date.now() > stored.expiresAt,
                     attempts: stored.attempts
-                } : null,
-                allOtpPhones: Object.keys(data.otpTokens || {})
+                } : null
             });
         } catch (err) {
             console.error('[Debug] Error:', err.message);
@@ -68,19 +67,14 @@ const createRouter = (db) => {
             const otp = msg91.generateOTP();
             console.log('[DeviceAuth] Generated OTP:', otp);
             
-            // Store OTP in database - MUST succeed before sending SMS
+            // Store OTP in separate Firestore collection - more reliable for Cloud Run
             try {
-                await db.transact((data) => {
-                    if (!data.otpTokens) data.otpTokens = {};
-                    data.otpTokens[fullPhone] = {
-                        otp,
-                        expiresAt: Date.now() + OTP_EXPIRY_MS,
-                        attempts: 0,
-                        createdAt: new Date().toISOString(),
-                    };
-                    return { data: { stored: true } };
+                await db.storeOTP(fullPhone, {
+                    otp,
+                    expiresAt: Date.now() + OTP_EXPIRY_MS,
+                    attempts: 0,
                 });
-                console.log('[DeviceAuth] OTP stored in database:', fullPhone, '=', otp);
+                console.log('[DeviceAuth] OTP stored in Firestore:', fullPhone, '=', otp);
             } catch (dbErr) {
                 console.error('[DeviceAuth] Database error:', dbErr.message);
                 return response.error(res, 'Failed to initialize OTP. Please try again.', 500);
@@ -125,18 +119,16 @@ const createRouter = (db) => {
             const fullPhone = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
             console.log('[DeviceAuth] Looking up OTP for:', fullPhone);
 
-            // Verify OTP from database - FORCE REFRESH to bypass cache
-            let currentData;
+            // Get OTP from separate Firestore collection
+            let stored;
             try {
-                currentData = await db.load(true); // Force fresh read from Firestore
+                stored = await db.getOTP(fullPhone);
             } catch (loadErr) {
-                console.error('[DeviceAuth] Failed to load database:', loadErr.message);
+                console.error('[DeviceAuth] Failed to get OTP:', loadErr.message);
                 return response.error(res, 'Database unavailable', 503);
             }
             
-            const stored = currentData.otpTokens?.[fullPhone];
             console.log('[DeviceAuth] Stored OTP data for', fullPhone, ':', stored ? { otp: stored.otp, expiresAt: stored.expiresAt, attempts: stored.attempts } : 'NOT FOUND');
-            console.log('[DeviceAuth] All OTP keys:', Object.keys(currentData.otpTokens || {}));
 
             if (!stored) {
                 return response.unauthorized(res, 'OTP expired or not found. Please request a new OTP.');
@@ -144,23 +136,13 @@ const createRouter = (db) => {
 
             if (Date.now() > stored.expiresAt) {
                 console.log('[DeviceAuth] OTP expired');
-                try {
-                    await db.transact((data) => {
-                        if (data.otpTokens) delete data.otpTokens[fullPhone];
-                        return { data: { deleted: true } };
-                    });
-                } catch (e) { console.error('[DeviceAuth] Failed to delete expired OTP:', e.message); }
+                try { await db.deleteOTP(fullPhone); } catch (e) { }
                 return response.unauthorized(res, 'OTP has expired. Please request a new OTP.');
             }
 
             if (stored.attempts >= 3) {
                 console.log('[DeviceAuth] Too many attempts');
-                try {
-                    await db.transact((data) => {
-                        if (data.otpTokens) delete data.otpTokens[fullPhone];
-                        return { data: { deleted: true } };
-                    });
-                } catch (e) { console.error('[DeviceAuth] Failed to delete OTP after max attempts:', e.message); }
+                try { await db.deleteOTP(fullPhone); } catch (e) { }
                 return response.unauthorized(res, 'Too many failed attempts. Please request a new OTP.');
             }
 
@@ -168,27 +150,20 @@ const createRouter = (db) => {
             
             if (stored.otp !== otp) {
                 // Increment attempts
-                try {
-                    await db.transact((data) => {
-                        if (data.otpTokens?.[fullPhone]) {
-                            data.otpTokens[fullPhone].attempts = (data.otpTokens[fullPhone].attempts || 0) + 1;
-                        }
-                        return { data: { updated: true } };
-                    });
-                } catch (e) { console.error('[DeviceAuth] Failed to update attempts:', e.message); }
+                try { await db.updateOTPAttempts(fullPhone, (stored.attempts || 0) + 1); } catch (e) { }
                 const remaining = 3 - (stored.attempts + 1);
                 return response.unauthorized(res, `Invalid OTP. ${remaining} attempts remaining.`);
             }
 
             console.log('[DeviceAuth] OTP verified successfully, creating/updating partner...');
 
-            // OTP verified - delete it and proceed with registration/login
+            // Delete OTP first
+            try { await db.deleteOTP(fullPhone); } catch (e) { }
+
+            // OTP verified - proceed with registration/login
             let partnerData;
             try {
                 partnerData = await db.transact((data) => {
-                    // Delete used OTP
-                    if (data.otpTokens) delete data.otpTokens[fullPhone];
-                    
                     let partner = data.franchises.find(f => f.phone === fullPhone);
 
                     if (partner) {
@@ -279,16 +254,11 @@ const createRouter = (db) => {
             // Generate new OTP
             const otp = msg91.generateOTP();
             
-            // Store OTP in database
-            await db.transact((data) => {
-                if (!data.otpTokens) data.otpTokens = {};
-                data.otpTokens[fullPhone] = {
-                    otp,
-                    expiresAt: Date.now() + OTP_EXPIRY_MS,
-                    attempts: 0,
-                    createdAt: new Date().toISOString(),
-                };
-                return { data: null };
+            // Store OTP in separate Firestore collection
+            await db.storeOTP(fullPhone, {
+                otp,
+                expiresAt: Date.now() + OTP_EXPIRY_MS,
+                attempts: 0,
             });
 
             // Send SMS
