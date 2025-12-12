@@ -5,21 +5,42 @@
  */
 
 const { Firestore } = require('@google-cloud/firestore');
+const fs = require('fs');
+const path = require('path');
 
 class DatabaseManager {
     constructor() {
-        const firestoreOptions = {};
-        if (process.env.FIRESTORE_PROJECT_ID) {
-            firestoreOptions.projectId = process.env.FIRESTORE_PROJECT_ID;
+        const bundledKeyPath = path.join(__dirname, '../../../service-account-key.json');
+        if (!process.env.GOOGLE_APPLICATION_CREDENTIALS && fs.existsSync(bundledKeyPath)) {
+            process.env.GOOGLE_APPLICATION_CREDENTIALS = bundledKeyPath;
+            console.log('[DB] GOOGLE_APPLICATION_CREDENTIALS set to bundled key:', bundledKeyPath);
         }
 
-        this.firestore = Object.keys(firestoreOptions).length
-            ? new Firestore(firestoreOptions)
-            : new Firestore();
+        let projectId = process.env.FIRESTORE_PROJECT_ID;
+        if (!projectId && process.env.GOOGLE_APPLICATION_CREDENTIALS && fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+            try {
+                const raw = fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8');
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed.project_id) {
+                    projectId = parsed.project_id;
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        const firestoreOptions = {};
+        if (projectId) {
+            firestoreOptions.projectId = projectId;
+        }
+
+        this.firestore = Object.keys(firestoreOptions).length ? new Firestore(firestoreOptions) : new Firestore();
 
         console.log('[DB] Firestore init env:', {
             FIRESTORE_PROJECT_ID: process.env.FIRESTORE_PROJECT_ID,
             GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
+            GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+            resolvedProjectId: projectId,
         });
         this.collectionName = 'system';
         this.docId = 'main';
