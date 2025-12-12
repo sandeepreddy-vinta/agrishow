@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.ProgressBar
@@ -35,6 +36,7 @@ class PlayerActivity : AppCompatActivity() {
     private var playlist: List<ContentItem> = emptyList()
     private var currentIndex = 0
     private val handler = Handler(Looper.getMainLooper())
+    private var hideControllerRunnable: Runnable? = null
     
     private val TAG = "PlayerActivity"
     
@@ -74,6 +76,9 @@ class PlayerActivity : AppCompatActivity() {
         imageView = findViewById(R.id.imageView)
         tvStatus = findViewById(R.id.tvStatus)
         progressBar = findViewById(R.id.progressBar)
+
+        playerView.useController = true
+        playerView.hideController()
     }
     
     private fun hideSystemUI() {
@@ -162,6 +167,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun playVideo(item: ContentItem) {
         imageView.visibility = View.GONE
         playerView.visibility = View.VISIBLE
+        playerView.hideController()
         
         val isLocal = item.localPath != null
         val uri = item.localPath?.let { "file://$it" } ?: item.url
@@ -173,6 +179,37 @@ class PlayerActivity : AppCompatActivity() {
         exoPlayer?.setMediaItem(mediaItem)
         exoPlayer?.prepare()
         exoPlayer?.play()
+    }
+
+    private fun showControlsTemporarily(timeoutMs: Long = 3000) {
+        if (playerView.visibility != View.VISIBLE) return
+        playerView.showController()
+        hideControllerRunnable?.let { handler.removeCallbacks(it) }
+        hideControllerRunnable = Runnable { playerView.hideController() }
+        handler.postDelayed(hideControllerRunnable!!, timeoutMs)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_DPAD_UP,
+                KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_LEFT,
+                KeyEvent.KEYCODE_DPAD_RIGHT,
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                KeyEvent.KEYCODE_MEDIA_PLAY,
+                KeyEvent.KEYCODE_MEDIA_PAUSE,
+                KeyEvent.KEYCODE_MEDIA_NEXT,
+                KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+                KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
+                KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                    showControlsTemporarily()
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
     
     private fun showImage(item: ContentItem) {

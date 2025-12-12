@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, MapPin, Loader2, X } from 'lucide-react';
+import { Plus, MapPin, Loader2, X } from 'lucide-react';
 import FranchiseCard from './FranchiseCard';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -85,10 +85,94 @@ const AddFranchiseModal = ({ isOpen, onClose, onAdd }) => {
     );
 };
 
+const EditFranchiseModal = ({ isOpen, onClose, franchise, onSave }) => {
+    const [formData, setFormData] = useState({ name: '', location: '' });
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen || !franchise) return;
+        setFormData({
+            name: franchise.name || '',
+            location: franchise.location || '',
+        });
+    }, [isOpen, franchise]);
+
+    if (!isOpen || !franchise) return null;
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await onSave(franchise, formData);
+            onClose();
+        } catch (error) {
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-[#1e293b] border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold text-white">Edit Partner Details</h2>
+                    <button onClick={onClose} className="text-muted hover:text-white transition-colors">
+                        <X size={24} />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-muted mb-1">Partner Name</label>
+                        <input
+                            type="text"
+                            required
+                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors"
+                            value={formData.name}
+                            onChange={e => setFormData({ ...formData, name: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-muted mb-1">Location</label>
+                        <input
+                            type="text"
+                            required
+                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors"
+                            value={formData.location}
+                            onChange={e => setFormData({ ...formData, location: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-muted mb-1">Device ID</label>
+                        <input
+                            type="text"
+                            disabled
+                            className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-muted/80 focus:outline-none"
+                            value={franchise.deviceId || ''}
+                        />
+                    </div>
+                    <div className="flex justify-end gap-3 mt-6">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-muted hover:text-white transition-colors">Cancel</button>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {loading && <Loader2 size={16} className="animate-spin" />}
+                            Save
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 const FranchiseManager = () => {
     const [franchises, setFranchises] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isaddModalOpen, setIsAddModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editingFranchise, setEditingFranchise] = useState(null);
 
     const fetchFranchises = async () => {
         try {
@@ -158,9 +242,26 @@ const FranchiseManager = () => {
         }
     };
 
+    const handleUpdateFranchise = async (franchise, data) => {
+        const toastId = toast.loading('Updating partner...');
+        try {
+            await api.put(`/franchises/${franchise.id}`, {
+                name: data.name,
+                location: data.location,
+            });
+            toast.success('Partner updated successfully', { id: toastId });
+            fetchFranchises();
+        } catch (error) {
+            console.error(error);
+            const msg = error.response?.data?.message || error.response?.data?.error || 'Failed to update partner';
+            toast.error(msg, { id: toastId });
+            throw error;
+        }
+    };
+
     const handleEditFranchise = (franchise) => {
-        toast('Edit functionality coming soon!', { icon: '🔧' });
-        // TODO: Implement edit modal
+        setEditingFranchise(franchise);
+        setIsEditModalOpen(true);
     };
 
     if (loading) {
@@ -177,6 +278,16 @@ const FranchiseManager = () => {
                 isOpen={isaddModalOpen}
                 onClose={() => setIsAddModalOpen(false)}
                 onAdd={handleAddFranchise}
+            />
+
+            <EditFranchiseModal
+                isOpen={isEditModalOpen}
+                onClose={() => {
+                    setIsEditModalOpen(false);
+                    setEditingFranchise(null);
+                }}
+                franchise={editingFranchise}
+                onSave={handleUpdateFranchise}
             />
 
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
