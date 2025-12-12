@@ -15,6 +15,8 @@ import com.franchiseos.player.R
 import com.franchiseos.player.data.api.RetrofitClient
 import com.franchiseos.player.utils.PreferenceManager
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+import retrofit2.Response
 
 class SetupActivity : AppCompatActivity() {
     
@@ -41,14 +43,56 @@ class SetupActivity : AppCompatActivity() {
         setContentView(R.layout.activity_setup)
         
         prefs = PreferenceManager(this)
+        currentPhone = prefs.getPhoneNumber()
         
         initViews()
         setupListeners()
+        if (currentPhone.isNotBlank()) {
+            etPhone.setText(currentPhone)
+        }
         
         if (prefs.isConfigured()) {
             startPlayer()
             return
         }
+    }
+
+    private fun extractErrorMessage(response: Response<*>): String {
+        val bodyMsg = try {
+            // Some endpoints may still return a body on errors
+            val body = response.body()
+            val messageField = body?.javaClass?.getDeclaredField("message")
+            messageField?.isAccessible = true
+            messageField?.get(body) as? String
+        } catch (e: Exception) {
+            null
+        }
+        if (!bodyMsg.isNullOrBlank()) return bodyMsg
+
+        val raw = response.errorBody()?.string()
+        if (raw.isNullOrBlank()) return "Request failed"
+
+        return try {
+            val json = JSONObject(raw)
+            val msg = json.optString("message")
+            if (msg.isNullOrBlank()) raw else msg
+        } catch (e: Exception) {
+            raw
+        }
+    }
+
+    private fun requireCurrentPhone(): String {
+        if (currentPhone.isNotBlank()) return currentPhone
+        val fromInput = etPhone.text?.toString()?.trim().orEmpty()
+        if (fromInput.isNotBlank()) {
+            currentPhone = fromInput
+            return currentPhone
+        }
+        val fromPrefs = prefs.getPhoneNumber()
+        if (fromPrefs.isNotBlank()) {
+            currentPhone = fromPrefs
+        }
+        return currentPhone
     }
     
     private fun initViews() {
@@ -89,6 +133,7 @@ class SetupActivity : AppCompatActivity() {
         }
         
         currentPhone = phone
+        prefs.savePhoneNumber(phone)
         setLoading(true)
         
         lifecycleScope.launch {
@@ -102,7 +147,7 @@ class SetupActivity : AppCompatActivity() {
                     showOtpStep()
                     showSuccess("OTP sent to +91 $phone")
                 } else {
-                    val errorMsg = response.body()?.message ?: "Failed to send OTP"
+                    val errorMsg = extractErrorMessage(response)
                     showError(errorMsg)
                 }
             } catch (e: Exception) {
@@ -127,9 +172,16 @@ class SetupActivity : AppCompatActivity() {
             try {
                 val apiUrl = prefs.getApiUrl()
                 val api = RetrofitClient.getClient(apiUrl)
+
+                val phoneToVerify = requireCurrentPhone()
+                if (phoneToVerify.isBlank()) {
+                    showError("Phone number missing. Please go back and enter phone again.")
+                    showPhoneStep()
+                    return@launch
+                }
                 
                 val response = api.verifyOtp(mapOf(
-                    "phone" to currentPhone,
+                    "phone" to phoneToVerify,
                     "otp" to otp
                 ))
                 
@@ -142,7 +194,7 @@ class SetupActivity : AppCompatActivity() {
                             deviceId = data.deviceId,
                             partnerId = data.partnerId,
                             partnerName = data.partnerName,
-                            phone = currentPhone,
+                            phone = phoneToVerify,
                             apiUrl = apiUrl
                         )
                         
@@ -158,7 +210,7 @@ class SetupActivity : AppCompatActivity() {
                         showError("Invalid response from server")
                     }
                 } else {
-                    val errorMsg = response.body()?.message ?: "Invalid OTP"
+                    val errorMsg = extractErrorMessage(response)
                     showError(errorMsg)
                 }
             } catch (e: Exception) {
@@ -176,13 +228,20 @@ class SetupActivity : AppCompatActivity() {
             try {
                 val apiUrl = prefs.getApiUrl()
                 val api = RetrofitClient.getClient(apiUrl)
+
+                val phoneToResend = requireCurrentPhone()
+                if (phoneToResend.isBlank()) {
+                    showError("Phone number missing. Please go back and enter phone again.")
+                    showPhoneStep()
+                    return@launch
+                }
                 
-                val response = api.resendOtp(mapOf("phone" to currentPhone))
+                val response = api.resendOtp(mapOf("phone" to phoneToResend))
                 
                 if (response.isSuccessful && response.body()?.success == true) {
-                    showSuccess("OTP resent to +91 $currentPhone")
+                    showSuccess("OTP resent to +91 $phoneToResend")
                 } else {
-                    val errorMsg = response.body()?.message ?: "Failed to resend OTP"
+                    val errorMsg = extractErrorMessage(response)
                     showError(errorMsg)
                 }
             } catch (e: Exception) {
@@ -199,6 +258,9 @@ class SetupActivity : AppCompatActivity() {
         btnStartPlayer.visibility = View.GONE
         tvSubtitle.text = "Partner Login"
         etOtp.setText("")
+        if (currentPhone.isNotBlank()) {
+            etPhone.setText(currentPhone)
+        }
         hideStatus()
     }
     
