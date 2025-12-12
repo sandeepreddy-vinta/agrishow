@@ -8,6 +8,8 @@ const crypto = require('crypto');
 const response = require('../utils/response');
 const msg91 = require('../services/msg91');
 
+const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+
 const createRouter = (db) => {
     const router = express.Router();
 
@@ -32,7 +34,23 @@ const createRouter = (db) => {
 
             const fullPhone = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
 
-            const result = await msg91.sendOTP(fullPhone);
+            // Generate OTP
+            const otp = msg91.generateOTP();
+            
+            // Store OTP in database
+            await db.transact((data) => {
+                if (!data.otpTokens) data.otpTokens = {};
+                data.otpTokens[fullPhone] = {
+                    otp,
+                    expiresAt: Date.now() + OTP_EXPIRY_MS,
+                    attempts: 0,
+                    createdAt: new Date().toISOString(),
+                };
+                return { data: null };
+            });
+
+            // Send SMS
+            const result = await msg91.sendSMS(fullPhone, otp);
 
             if (!result.success) {
                 return response.error(res, result.message, 400);
@@ -66,13 +84,47 @@ const createRouter = (db) => {
             const cleanPhone = phone.replace(/[\s+\-]/g, '');
             const fullPhone = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
 
-            const verifyResult = await msg91.verifyOTP(fullPhone, otp);
+            // Verify OTP from database
+            const currentData = await db.load();
+            const stored = currentData.otpTokens?.[fullPhone];
 
-            if (!verifyResult.success) {
-                return response.unauthorized(res, verifyResult.message || 'Invalid OTP');
+            if (!stored) {
+                return response.unauthorized(res, 'OTP expired or not found. Please request a new OTP.');
             }
 
+            if (Date.now() > stored.expiresAt) {
+                // Clean up expired OTP
+                await db.transact((data) => {
+                    if (data.otpTokens) delete data.otpTokens[fullPhone];
+                    return { data: null };
+                });
+                return response.unauthorized(res, 'OTP has expired. Please request a new OTP.');
+            }
+
+            if (stored.attempts >= 3) {
+                await db.transact((data) => {
+                    if (data.otpTokens) delete data.otpTokens[fullPhone];
+                    return { data: null };
+                });
+                return response.unauthorized(res, 'Too many failed attempts. Please request a new OTP.');
+            }
+
+            if (stored.otp !== otp) {
+                // Increment attempts
+                await db.transact((data) => {
+                    if (data.otpTokens?.[fullPhone]) {
+                        data.otpTokens[fullPhone].attempts = (data.otpTokens[fullPhone].attempts || 0) + 1;
+                    }
+                    return { data: null };
+                });
+                const remaining = 3 - (stored.attempts + 1);
+                return response.unauthorized(res, `Invalid OTP. ${remaining} attempts remaining.`);
+            }
+
+            // OTP verified - delete it and proceed with registration/login
             const result = await db.transact((data) => {
+                // Delete used OTP
+                if (data.otpTokens) delete data.otpTokens[fullPhone];
                 let partner = data.franchises.find(f => f.phone === fullPhone);
 
                 if (partner) {
@@ -142,7 +194,7 @@ const createRouter = (db) => {
      */
     router.post('/resend-otp', async (req, res, next) => {
         try {
-            const { phone, type } = req.body;
+            const { phone } = req.body;
 
             if (!phone) {
                 return response.badRequest(res, 'Phone number is required');
@@ -151,7 +203,23 @@ const createRouter = (db) => {
             const cleanPhone = phone.replace(/[\s+\-]/g, '');
             const fullPhone = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
 
-            const result = await msg91.resendOTP(fullPhone, type || 'text');
+            // Generate new OTP
+            const otp = msg91.generateOTP();
+            
+            // Store OTP in database
+            await db.transact((data) => {
+                if (!data.otpTokens) data.otpTokens = {};
+                data.otpTokens[fullPhone] = {
+                    otp,
+                    expiresAt: Date.now() + OTP_EXPIRY_MS,
+                    attempts: 0,
+                    createdAt: new Date().toISOString(),
+                };
+                return { data: null };
+            });
+
+            // Send SMS
+            const result = await msg91.sendSMS(fullPhone, otp);
 
             if (!result.success) {
                 return response.error(res, result.message, 400);
