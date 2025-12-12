@@ -40,7 +40,7 @@ const createRouter = (db) => {
             const otp = msg91.generateOTP();
             console.log('[DeviceAuth] Generated OTP:', otp);
             
-            // Store OTP in database
+            // Store OTP in database - MUST succeed before sending SMS
             try {
                 await db.transact((data) => {
                     if (!data.otpTokens) data.otpTokens = {};
@@ -52,11 +52,10 @@ const createRouter = (db) => {
                     };
                     return { data: { stored: true } };
                 });
-                console.log('[DeviceAuth] OTP stored in database');
+                console.log('[DeviceAuth] OTP stored in database:', fullPhone, '=', otp);
             } catch (dbErr) {
-                console.error('[DeviceAuth] Database error:', dbErr.message, dbErr.stack);
-                // Don't fail - try to send OTP anyway, verification might still work
-                console.log('[DeviceAuth] Continuing despite DB error...');
+                console.error('[DeviceAuth] Database error:', dbErr.message);
+                return response.error(res, 'Failed to initialize OTP. Please try again.', 500);
             }
 
             // Send SMS
