@@ -25,7 +25,34 @@ const createApp = (db, contentDir, backupDir) => {
 
     // --- Core Middleware ---
 
-    // 1. Rate Limiting
+    // 1. CORS - Restricted to allowed origins
+    const corsOptions = {
+        origin: (origin, callback) => {
+            // Allow requests with no origin (mobile apps, Postman, etc.)
+            if (!origin) return callback(null, true);
+
+            const normalizedOrigin = origin.replace(/\/$/, '');
+            
+            // In development, allow localhost and 127.0.0.1 on any port
+            const isDev = process.env.NODE_ENV !== 'production';
+            const isLocalhost = normalizedOrigin.includes('localhost') || normalizedOrigin.includes('127.0.0.1');
+            
+            if (config.allowedOrigins.includes(normalizedOrigin) || (isDev && isLocalhost)) {
+                callback(null, true);
+            } else {
+                console.warn(`[CORS] Blocked origin: ${normalizedOrigin}`);
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Device-Token'],
+        optionsSuccessStatus: 204,
+    };
+    app.use(cors(corsOptions));
+    app.options('*', cors(corsOptions));
+
+    // 2. Rate Limiting
     const limiter = rateLimit({
         windowMs: 60 * 60 * 1000, // 1 hour
         max: 1000, // Increased for development
@@ -35,29 +62,6 @@ const createApp = (db, contentDir, backupDir) => {
         skip: (req) => req.path === '/api/health', // Don't rate limit health checks
     });
     app.use(limiter);
-
-    // 2. CORS - Restricted to allowed origins
-    const corsOptions = {
-        origin: (origin, callback) => {
-            // Allow requests with no origin (mobile apps, Postman, etc.)
-            if (!origin) return callback(null, true);
-            
-            // In development, allow localhost and 127.0.0.1 on any port
-            const isDev = process.env.NODE_ENV !== 'production';
-            const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
-            
-            if (config.allowedOrigins.includes(origin) || (isDev && isLocalhost)) {
-                callback(null, true);
-            } else {
-                console.warn(`[CORS] Blocked origin: ${origin}`);
-                callback(new Error('Not allowed by CORS'));
-            }
-        },
-        credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Device-Token'],
-    };
-    app.use(cors(corsOptions));
 
     // 3. Body Parsing
     app.use(express.json({ limit: '500mb' }));

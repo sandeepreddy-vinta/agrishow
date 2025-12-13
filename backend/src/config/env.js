@@ -53,7 +53,11 @@ const config = {
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 500 * 1024 * 1024,
     allowedVideoTypes: (process.env.ALLOWED_VIDEO_TYPES || '').split(','),
     allowedImageTypes: (process.env.ALLOWED_IMAGE_TYPES || '').split(','),
-    allowedOrigins: (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean),
+    allowedOrigins: (process.env.ALLOWED_ORIGINS || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => s.replace(/\/$/, '')),
     adminEmail: process.env.ADMIN_EMAIL,
     adminPassword: process.env.ADMIN_PASSWORD,
 };
