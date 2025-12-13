@@ -18,6 +18,14 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.engine.GlideException
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.CustomTarget
+import com.bumptech.glide.request.target.Target
+import com.bumptech.glide.request.transition.Transition
+import android.graphics.drawable.Drawable
+import android.graphics.Color
 import com.franchiseos.player.R
 import com.franchiseos.player.data.models.ContentItem
 import com.franchiseos.player.data.repository.PlayerRepository
@@ -78,6 +86,9 @@ class PlayerActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
 
         playerView.useController = true
+        playerView.controllerAutoShow = false
+        playerView.setKeepContentOnPlayerReset(true)
+        playerView.setShutterBackgroundColor(Color.TRANSPARENT)
         playerView.hideController()
     }
     
@@ -96,6 +107,12 @@ class PlayerActivity : AppCompatActivity() {
         exoPlayer = ExoPlayer.Builder(this).build().also { player ->
             playerView.player = player
             player.addListener(object : Player.Listener {
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    if (isPlaying) {
+                        imageView.visibility = View.GONE
+                    }
+                }
+
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     when (playbackState) {
                         Player.STATE_ENDED -> {
@@ -165,15 +182,13 @@ class PlayerActivity : AppCompatActivity() {
     }
     
     private fun playVideo(item: ContentItem) {
-        imageView.visibility = View.GONE
+        // Ensure playerView is visible behind the current content
         playerView.visibility = View.VISIBLE
         playerView.hideController()
         
         val isLocal = item.localPath != null
         val uri = item.localPath?.let { "file://$it" } ?: item.url
         Log.d(TAG, "Playing video from: $uri")
-        
-        showPlaybackSource(isLocal)
         
         val mediaItem = MediaItem.fromUri(uri)
         exoPlayer?.setMediaItem(mediaItem)
@@ -213,23 +228,42 @@ class PlayerActivity : AppCompatActivity() {
     }
     
     private fun showImage(item: ContentItem) {
-        playerView.visibility = View.GONE
-        imageView.visibility = View.VISIBLE
+        // Only clear previous image if we are coming from video (image was hidden)
+        // If coming from another image, we keep the old one until new one loads (seamless)
+        if (imageView.visibility == View.GONE) {
+            imageView.setImageDrawable(null)
+            imageView.visibility = View.VISIBLE
+        }
         
-        // Stop video player
-        exoPlayer?.stop()
+        // Note: We don't stop the video immediately to prevent black screen.
+        // We stop it once the image is loaded.
         
         val isLocal = item.localPath != null
         val uri = item.localPath?.let { "file://$it" } ?: item.url
         Log.d(TAG, "Showing image from: $uri")
         
-        showPlaybackSource(isLocal)
-        
         // Load image with Glide
         Glide.with(this)
             .load(uri)
             .centerCrop()
-            .into(imageView)
+            .into(object : CustomTarget<Drawable>() {
+                override fun onResourceReady(resource: Drawable, transition: Transition<in Drawable>?) {
+                    imageView.setImageDrawable(resource)
+                    // Image is ready, hide player and stop playback
+                    handler.post {
+                        playerView.visibility = View.GONE
+                        exoPlayer?.stop()
+                    }
+                }
+
+                override fun onLoadCleared(placeholder: Drawable?) {
+                    imageView.setImageDrawable(placeholder)
+                }
+
+                override fun onLoadFailed(errorDrawable: Drawable?) {
+                    Log.e(TAG, "Image load failed")
+                }
+            })
         
         // Schedule next item after duration
         val duration = (item.duration * 1000).toLong()
@@ -264,16 +298,18 @@ class PlayerActivity : AppCompatActivity() {
             tvStatus.visibility = View.GONE
         }, duration)
     }
-
-    private fun showPlaybackSource(isLocal: Boolean) {
-        val source = if (isLocal) "💾 Local Storage" else "🌐 Network Stream"
-        showStatus(source, 2000)
-    }
     
     override fun onResume() {
         super.onResume()
         hideSystemUI()
         exoPlayer?.play()
+    }
+    
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            hideSystemUI()
+        }
     }
     
     override fun onPause() {

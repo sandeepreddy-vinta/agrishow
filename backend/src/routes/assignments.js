@@ -14,9 +14,14 @@ const createRouter = (db) => {
      * POST /api/assignments
      * Assign content to a device (ADMIN)
      */
-    router.post('/', requireAdmin, validateBody('createAssignment'), async (req, res, next) => {
+    router.post('/', requireAdmin, async (req, res, next) => {
         try {
-            const { deviceId, contentIds } = req.validatedBody;
+            const { deviceId, items, playbackOrder } = req.body;
+
+            // Simple validation since we're changing schema
+            if (!deviceId || !Array.isArray(items)) {
+                return response.badRequest(res, 'Invalid request body');
+            }
 
             const result = await db.transact((data) => {
                 const franchise = data.franchises.find(f => f.deviceId === deviceId);
@@ -25,23 +30,54 @@ const createRouter = (db) => {
                     throw Object.assign(new Error('Partner not found'), { code: 'NOT_FOUND' });
                 }
 
-                // Validate that all content IDs exist
-                const validIds = contentIds.filter(id => data.content.some(c => c.id === id));
-                const invalidIds = contentIds.filter(id => !data.content.some(c => c.id === id));
-
-                if (invalidIds.length > 0) {
-                    console.warn(`[Assignments] Invalid content IDs ignored: ${invalidIds.join(', ')}`);
+                // Update Playback Order if provided
+                if (playbackOrder) {
+                    franchise.playbackOrder = playbackOrder; // 'sequential' or 'random'
                 }
 
-                data.assignments[deviceId] = validIds;
+                // Validate items
+                const validItems = [];
+                const invalidItems = [];
+
+                for (const item of items) {
+                    // Normalize item structure
+                    // Can be simple string (legacy content ID) or object { type, id }
+                    let type = 'content';
+                    let id = item;
+                    
+                    if (typeof item === 'object') {
+                        type = item.type || 'content';
+                        id = item.id;
+                    }
+
+                    let exists = false;
+                    if (type === 'content') {
+                        exists = data.content.some(c => c.id === id);
+                    } else if (type === 'folder') {
+                        exists = (data.folders || []).some(f => f.id === id);
+                    }
+
+                    if (exists) {
+                        validItems.push({ type, id });
+                    } else {
+                        invalidItems.push({ type, id });
+                    }
+                }
+
+                if (invalidItems.length > 0) {
+                    console.warn(`[Assignments] Invalid items ignored: ${JSON.stringify(invalidItems)}`);
+                }
+
+                data.assignments[deviceId] = validItems;
 
                 return {
                     data: {
                         deviceId,
-                        assignedContent: validIds,
-                        invalidIds: invalidIds.length > 0 ? invalidIds : undefined,
+                        assignedItems: validItems,
+                        playbackOrder: franchise.playbackOrder,
+                        invalidItems: invalidItems.length > 0 ? invalidItems : undefined,
                     },
-                    audit: { action: 'UPDATE_ASSIGNMENTS', details: { deviceId, count: validIds.length } },
+                    audit: { action: 'UPDATE_ASSIGNMENTS', details: { deviceId, count: validItems.length } },
                 };
             });
 
@@ -63,22 +99,39 @@ const createRouter = (db) => {
             const data = await db.load();
             
             // Enrich with franchise and content details
-            const enrichedAssignments = Object.entries(data.assignments).map(([deviceId, contentIds]) => {
-            const franchise = data.franchises.find(f => f.deviceId === deviceId);
-            const contents = contentIds.map(id => {
-                const content = data.content.find(c => c.id === id);
-                return content ? { id: content.id, name: content.name, type: content.type } : null;
-            }).filter(Boolean);
+            const enrichedAssignments = Object.entries(data.assignments).map(([deviceId, items]) => {
+                const franchise = data.franchises.find(f => f.deviceId === deviceId);
+                
+                // Normalize items (handle legacy array of strings)
+                const normalizedItems = (Array.isArray(items) ? items : []).map(item => {
+                    if (typeof item === 'string') return { type: 'content', id: item };
+                    return item;
+                });
 
-            return {
-                deviceId,
-                franchise: franchise ? { id: franchise.id, name: franchise.name, location: franchise.location } : null,
-                contentCount: contents.length,
-                contents,
-            };
-        });
+                const enrichedItems = normalizedItems.map(item => {
+                    if (item.type === 'folder') {
+                        const folder = (data.folders || []).find(f => f.id === item.id);
+                        return folder ? { ...item, name: folder.name } : null;
+                    } else {
+                        const content = data.content.find(c => c.id === item.id);
+                        return content ? { ...item, name: content.name, contentType: content.type } : null;
+                    }
+                }).filter(Boolean);
 
-        return response.success(res, enrichedAssignments);
+                return {
+                    deviceId,
+                    franchise: franchise ? { 
+                        id: franchise.id, 
+                        name: franchise.name, 
+                        location: franchise.location,
+                        playbackOrder: franchise.playbackOrder || 'sequential'
+                    } : null,
+                    itemCount: enrichedItems.length,
+                    items: enrichedItems,
+                };
+            });
+
+            return response.success(res, enrichedAssignments);
         } catch (err) {
             return response.error(res, 'Failed to load assignments', 500);
         }
@@ -95,18 +148,38 @@ const createRouter = (db) => {
             
             const franchise = data.franchises.find(f => f.deviceId === deviceId);
         
-        if (!franchise) {
-            return response.notFound(res, 'Partner not found');
-        }
+            if (!franchise) {
+                return response.notFound(res, 'Partner not found');
+            }
 
-        const contentIds = data.assignments[deviceId] || [];
-        const contents = contentIds.map(id => data.content.find(c => c.id === id)).filter(Boolean);
+            const rawItems = data.assignments[deviceId] || [];
+            
+            // Normalize
+            const normalizedItems = rawItems.map(item => {
+                if (typeof item === 'string') return { type: 'content', id: item };
+                return item;
+            });
 
-        return response.success(res, {
-            deviceId,
-            franchise: { id: franchise.id, name: franchise.name, location: franchise.location },
-            assignments: contents,
-        });
+            const enrichedItems = normalizedItems.map(item => {
+                if (item.type === 'folder') {
+                    const folder = (data.folders || []).find(f => f.id === item.id);
+                    return folder ? { ...item, name: folder.name, childCount: folder.contentIds?.length || 0 } : null;
+                } else {
+                    const content = data.content.find(c => c.id === item.id);
+                    return content ? { ...item, name: content.name, contentType: content.type } : null;
+                }
+            }).filter(Boolean);
+
+            return response.success(res, {
+                deviceId,
+                franchise: { 
+                    id: franchise.id, 
+                    name: franchise.name, 
+                    location: franchise.location,
+                    playbackOrder: franchise.playbackOrder || 'sequential'
+                },
+                assignments: enrichedItems,
+            });
         } catch (err) {
             return response.error(res, 'Failed to load assignments', 500);
         }

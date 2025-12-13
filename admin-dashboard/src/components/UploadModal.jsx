@@ -23,16 +23,11 @@ const UploadModal = ({ isOpen, onClose, onUpload }) => {
 
     const handleUpload = async () => {
         setUploading(true);
-        // Simulate upload
-        for (let i = 0; i <= 100; i += 10) {
-            setProgress(i);
-            await new Promise(r => setTimeout(r, 200));
-        }
+        onClose(); // Close first, let the background toast handle progress/status
         onUpload(files);
         setUploading(false);
         setFiles([]);
         setProgress(0);
-        onClose();
     };
 
     if (!isOpen) return null;

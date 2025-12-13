@@ -1,7 +1,7 @@
 import React from 'react';
-import { Play, Image, MoreVertical, Trash2, Eye } from 'lucide-react';
+import { Play, Image, MoreVertical, Trash2, Eye, X } from 'lucide-react';
 
-const ContentCard = ({ content, onDelete, onPreview }) => {
+const ContentCard = ({ content, onDelete, onPreview, actionIcon = 'delete' }) => {
     const isVideo = content.type === 'video';
 
     return (
@@ -26,10 +26,10 @@ const ContentCard = ({ content, onDelete, onPreview }) => {
                     </button>
                     <button
                         onClick={() => onDelete(content.id)}
-                        className="p-2 rounded-full bg-error/10 hover:bg-error/20 text-error transition-colors"
-                        title="Delete"
+                        className={`p-2 rounded-full transition-colors ${actionIcon === 'remove' ? 'bg-orange-500/10 hover:bg-orange-500/20 text-orange-400' : 'bg-error/10 hover:bg-error/20 text-error'}`}
+                        title={actionIcon === 'remove' ? 'Remove from Folder' : 'Delete'}
                     >
-                        <Trash2 size={20} />
+                        {actionIcon === 'remove' ? <X size={20} /> : <Trash2 size={20} />}
                     </button>
                 </div>
             </div>

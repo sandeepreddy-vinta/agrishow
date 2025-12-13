@@ -172,6 +172,7 @@ class DatabaseManager {
         return {
             franchises: [],
             content: [],
+            folders: [],
             assignments: {},
             analytics: [],
             _metadata: { version: 1, createdAt: new Date().toISOString() },

@@ -57,25 +57,58 @@ const createRouter = (db) => {
             const host = req.get('host');
             const baseUrl = `${protocol}://${host}`;
             
-            const assignedIds = data.assignments[deviceId] || [];
-            const playlist = assignedIds
-                .map(id => data.content.find(c => c.id === id))
-                .filter(Boolean)
-                .map(content => ({
-                    ...content,
-                    // Replace localhost URLs with the actual server address
-                    url: content.url.replace(/http:\/\/localhost:\d+/, baseUrl)
-                }));
+            const rawItems = data.assignments[deviceId] || [];
+            
+            // 1. Flatten folders and normalize items
+            let playlistItems = [];
+            
+            for (const item of rawItems) {
+                // Handle legacy string IDs
+                const type = (typeof item === 'object' && item.type) ? item.type : 'content';
+                const id = (typeof item === 'object' && item.id) ? item.id : item;
+
+                if (type === 'folder') {
+                    const folder = (data.folders || []).find(f => f.id === id);
+                    if (folder && folder.contentIds) {
+                        // Expand folder content
+                        for (const contentId of folder.contentIds) {
+                            const content = data.content.find(c => c.id === contentId);
+                            if (content) playlistItems.push(content);
+                        }
+                    }
+                } else {
+                    const content = data.content.find(c => c.id === id);
+                    if (content) playlistItems.push(content);
+                }
+            }
+
+            // 2. Handle Randomization
+            if (req.franchise.playbackOrder === 'random') {
+                // Fisher-Yates shuffle
+                for (let i = playlistItems.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [playlistItems[i], playlistItems[j]] = [playlistItems[j], playlistItems[i]];
+                }
+            }
+
+            // 3. Format for device
+            const playlist = playlistItems.map(content => ({
+                ...content,
+                // Replace localhost URLs with the actual server address
+                url: content.url.replace(/http:\/\/localhost:\d+/, baseUrl)
+            }));
 
             return response.success(res, {
                 deviceId,
                 partnerName: req.franchise.name,
                 location: req.franchise.location,
+                playbackOrder: req.franchise.playbackOrder || 'sequential',
                 playlist,
                 playlistCount: playlist.length,
                 lastUpdated: new Date().toISOString(),
             });
         } catch (err) {
+            console.error(err);
             return response.error(res, 'Failed to load playlist', 500);
         }
     });

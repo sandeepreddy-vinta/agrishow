@@ -14,6 +14,7 @@ const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const createAuthRoutes = require('./routes/auth');
 const createFranchiseRoutes = require('./routes/franchises');
 const createContentRoutes = require('./routes/content');
+const createFolderRoutes = require('./routes/folders');
 const createAssignmentRoutes = require('./routes/assignments');
 const createDeviceRoutes = require('./routes/device');
 const createStatsRoutes = require('./routes/stats');
@@ -59,8 +60,8 @@ const createApp = (db, contentDir, backupDir) => {
     app.use(cors(corsOptions));
 
     // 3. Body Parsing
-    app.use(express.json({ limit: '10mb' }));
-    app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+    app.use(express.json({ limit: '500mb' }));
+    app.use(express.urlencoded({ extended: true, limit: '500mb' }));
 
     // 4. Static file serving for uploaded content
     app.use('/content', express.static(contentDir));
@@ -82,6 +83,7 @@ const createApp = (db, contentDir, backupDir) => {
     app.use('/api/auth/device', createDeviceAuthRoutes(db)); // Phone OTP auth for TV devices
     app.use('/api/franchises', createFranchiseRoutes(db));
     app.use('/api/content', createContentRoutes(db, contentDir));
+    app.use('/api/folders', createFolderRoutes(db));
     app.use('/api/assignments', createAssignmentRoutes(db));
     app.use('/api', createDeviceRoutes(db)); // Handles /heartbeat, /playlist, /device/*
     app.use('/api', createStatsRoutes(db, backupDir)); // Handles /health, /stats
