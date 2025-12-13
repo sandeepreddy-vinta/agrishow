@@ -9,6 +9,14 @@ const AssignmentManager = () => {
     const [franchises, setFranchises] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    const unwrapResponse = (res) => {
+        const payload = res?.data ?? res;
+        if (payload && typeof payload === 'object' && 'data' in payload) {
+            return payload.data;
+        }
+        return payload;
+    };
+
     const fetchData = async () => {
         try {
             const [contentRes, foldersRes, franchisesRes] = await Promise.all([
@@ -17,18 +25,18 @@ const AssignmentManager = () => {
                 api.get('/franchises')
             ]);
 
-            const contentList = contentRes.data || contentRes;
-            const folderList = foldersRes.data || foldersRes;
-            const franchiseList = franchisesRes.data || franchisesRes;
+            const contentList = unwrapResponse(contentRes);
+            const folderList = unwrapResponse(foldersRes);
+            const franchiseList = unwrapResponse(franchisesRes);
 
-            const contentData = contentList.map(c => ({ id: c.id, title: c.name, type: 'content', contentType: c.type }));
-            const folderData = folderList.map(f => ({ id: f.id, title: f.name, type: 'folder', childCount: f.contentIds?.length || 0 }));
+            const contentData = (Array.isArray(contentList) ? contentList : []).map(c => ({ id: c.id, title: c.name, type: 'content', contentType: c.type }));
+            const folderData = (Array.isArray(folderList) ? folderList : []).map(f => ({ id: f.id, title: f.name, type: 'folder', childCount: f.contentIds?.length || 0 }));
 
             // Fetch assignments for each franchise
-            const franchisesWithItems = await Promise.all(franchiseList.map(async (f) => {
+            const franchisesWithItems = await Promise.all((Array.isArray(franchiseList) ? franchiseList : []).map(async (f) => {
                 try {
                     const assignRes = await api.get(`/assignments/${f.deviceId}`);
-                    const assignData = assignRes.data || assignRes;
+                    const assignData = unwrapResponse(assignRes);
                     
                     const assignments = assignData.assignments || [];
                     const items = assignments.map(item => ({

@@ -18,6 +18,14 @@ const ContentLibrary = () => {
     const [loading, setLoading] = useState(true);
     const [currentFolder, setCurrentFolder] = useState(null); // null = root
 
+    const unwrapResponse = (res) => {
+        const payload = res?.data ?? res;
+        if (payload && typeof payload === 'object' && 'data' in payload) {
+            return payload.data;
+        }
+        return payload;
+    };
+
     const fetchData = async () => {
         try {
             const [contentRes, foldersRes] = await Promise.all([
@@ -26,8 +34,8 @@ const ContentLibrary = () => {
             ]);
 
             // Content
-            const contentData = contentRes.data || contentRes;
-            const mappedContent = contentData.map(item => ({
+            const contentData = unwrapResponse(contentRes);
+            const mappedContent = (Array.isArray(contentData) ? contentData : []).map(item => ({
                 id: item.id,
                 title: item.name,
                 type: item.type,
@@ -39,8 +47,8 @@ const ContentLibrary = () => {
             setContent(mappedContent);
 
             // Folders
-            const foldersData = foldersRes.data || foldersRes;
-            setFolders(foldersData);
+            const foldersData = unwrapResponse(foldersRes);
+            setFolders(Array.isArray(foldersData) ? foldersData : []);
 
         } catch (error) {
             console.error('Failed to load library:', error);
@@ -72,7 +80,7 @@ const ContentLibrary = () => {
                     maxContentLength: Infinity
                 });
                 // Assuming response has the new content object
-                const newContent = res.data || res;
+                const newContent = unwrapResponse(res);
                 if (newContent && newContent.id) {
                     uploadedIds.push(newContent.id);
                 }
