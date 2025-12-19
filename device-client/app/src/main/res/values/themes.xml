@@ -9,6 +9,12 @@
         <item name="android:textColor">@color/text_primary</item>
     </style>
 
+    <!-- NoActionBar theme for splash -->
+    <style name="Theme.AgriShow.NoActionBar" parent="Theme.AgriShow">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
     <!-- Fullscreen theme for player -->
     <style name="Theme.AgriShow.Fullscreen" parent="Theme.AgriShow">
         <item name="android:windowFullscreen">true</item>
