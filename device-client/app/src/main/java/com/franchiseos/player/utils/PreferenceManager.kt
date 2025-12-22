@@ -18,7 +18,7 @@ class PreferenceManager(context: Context) {
         private const val KEY_PARTNER_ID = "partner_id"
         
         // Production API URL - Update this with your Cloud Run URL
-        const val PRODUCTION_API_URL = "https://agrishow1-752262898671.asia-south1.run.app/api"
+        const val PRODUCTION_API_URL = "https://agrishow1-206842770360.asia-south1.run.app/api"
     }
     
     fun saveApiUrl(url: String) {

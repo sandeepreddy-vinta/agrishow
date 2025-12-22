@@ -58,14 +58,14 @@ class StorageService {
 
         const file = this.bucket.file(filename);
 
-        // Upload to GCS with public-read ACL if bucket allows
+        // Upload to GCS (bucket must have uniform access with allUsers permission)
         await file.save(fileBuffer, {
             metadata: {
                 contentType: mimeType,
                 cacheControl: 'public, max-age=31536000', // Cache for 1 year
             },
             resumable: fileBuffer.length > 5 * 1024 * 1024, // Use resumable for files > 5MB
-            public: true, // Try to make public on upload
+            // Don't set public:true - use bucket-level IAM instead (uniform access)
         });
 
         // Get public URL (works if bucket has uniform access with allUsers)
